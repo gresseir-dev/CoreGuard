@@ -1,0 +1,545 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>StorageGuard PRO - Телеметрия накопителей</title>
+<style>
+  :root {
+    --bg: #0b0f19;
+    --card-bg: rgba(22, 30, 49, 0.75);
+    --border: rgba(255, 255, 255, 0.08);
+    --green: #10b981;
+    --orange: #f59e0b;
+    --red: #ef4444;
+    --blue: #38bdf8;
+    --purple: #a855f7;
+    --text: #f3f4f6;
+    --text-muted: #9ca3af;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { background: var(--bg); color: var(--text); padding: 24px; min-height: 100vh; }
+  
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .header h1 { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .badge { padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; border: 1px solid rgba(255,255,255,0.1); }
+  .badge-free { background: rgba(156, 163, 175, 0.15); color: #9ca3af; border-color: rgba(156, 163, 175, 0.3); }
+  .badge-pro { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: rgba(59, 130, 246, 0.4); }
+  
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-bottom: 24px; }
+  .card { background: var(--card-bg); backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
+  .card-title { font-size: 13px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .metric-value { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+  .metric-sub { font-size: 13px; color: var(--text-muted); }
+  
+  .progress-bar-wrap { background: rgba(255, 255, 255, 0.08); height: 10px; border-radius: 6px; overflow: hidden; margin-top: 14px; position: relative; }
+  .progress-bar-inner { height: 100%; border-radius: 6px; transition: width 0.5s ease; background: var(--green); width: 0%; }
+  
+  .charts-grid { display: flex; flex-direction: column; gap: 18px; margin-bottom: 24px; }
+  .chart-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
+  svg { width: 100%; height: 190px; overflow: visible; display: block; }
+  
+  .axis-label { fill: var(--text-muted); font-size: 11px; }
+  .grid-line { stroke: rgba(255, 255, 255, 0.08); stroke-dasharray: 4; stroke-width: 1; }
+  .danger-line { stroke: #ef4444; stroke-width: 1.5; stroke-dasharray: 5; }
+  .danger-text { fill: #f87171; font-size: 11px; font-weight: 600; }
+  
+  .spline-line { fill: none; stroke: var(--blue); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .spline-space-line { fill: none; stroke: var(--green); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  
+  .drive-list { display: flex; flex-direction: column; gap: 14px; }
+  .drive-item { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .drive-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px; }
+  .drive-name { font-weight: 600; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .drive-badges { display: flex; gap: 8px; font-size: 12px; font-weight: 600; align-items: center; flex-wrap: wrap; }
+  .chip { padding: 4px 10px; border-radius: 6px; font-weight: 600; }
+  .chip-ok { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+  .chip-warn { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+  .chip-crit { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+  .params-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; font-size: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.05); color: var(--text-muted); }
+  .params-grid strong { color: var(--text); font-size: 14px; display: block; margin-top: 2px; }
+  
+  .threshold-control { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); background: rgba(255,255,255,0.04); padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); }
+  .threshold-input { width: 55px; background: #0b0f19; border: 1px solid var(--border); color: #fff; border-radius: 4px; padding: 3px 6px; text-align: center; font-size: 13px; font-weight: 600; }
+  .btn-action { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 7px 16px; cursor: pointer; font-size: 12px; font-weight: 600; transition: background 0.2s; }
+  .btn-action:hover { background: #1d4ed8; }
+  .btn-secondary { background: rgba(255,255,255,0.1); color: var(--text); }
+  .btn-secondary:hover { background: rgba(255,255,255,0.15); }
+
+  /* Формы настроек PRO */
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 10px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+  .form-control { background: #0b0f19; border: 1px solid var(--border); color: #fff; border-radius: 6px; padding: 8px 12px; font-size: 13px; }
+  .form-control:disabled { opacity: 0.5; cursor: not-allowed; }
+  .switch-row { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }
+  .hint-text { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); align-items: center; margin-top: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-box { width: 12px; height: 12px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🛡️ StorageGuard PRO Telemetry</h1>
+  <div style="display: flex; gap: 10px; align-items: center;">
+    <span id="remote-indicator" class="chip chip-ok" style="display:none; font-size:11px;">LAN: Внешний доступ активен</span>
+    <span id="last-update" style="font-size: 12px; color: var(--text-muted);">Обновлено только что</span>
+    <div id="mode-badge" class="badge badge-free">Режим: FREE</div>
+  </div>
+</div>
+
+<!-- БЛОК НАСТРОЕК PRO (Удаленный доступ, сеть, бэкапы) -->
+<div class="card" style="margin-bottom: 24px; border-color: rgba(59, 130, 246, 0.4);">
+  <div class="card-title">
+    <span>⚙️ Параметры PRO: Удалённый дашборд и Автоматизация безопасности</span>
+    <span id="license-owner" style="font-size: 12px; color: #60a5fa; text-transform: none;">Лицензия не активирована</span>
+  </div>
+
+  <div class="form-grid">
+    <div class="form-group">
+      <label>Частота опроса накопителей:</label>
+      <select id="cfg-poll-interval" class="form-control">
+        <option value="120">Каждые 2 часа (FREE)</option>
+        <option value="60">Каждый 1 час (PRO)</option>
+        <option value="30">Каждые 30 минут (PRO)</option>
+        <option value="15">Каждые 15 минут (PRO)</option>
+        <option value="5">Каждые 5 минут (PRO - Рекомендуется)</option>
+        <option value="1">Каждую 1 минуту (Enterprise)</option>
+      </select>
+      <span class="hint-text">Периодичность аппаратного чтения SMART</span>
+    </div>
+
+    <div class="form-group">
+      <label>Удалённый веб-доступ (Remote Dashboard):</label>
+      <label class="switch-row" style="margin-top: 6px;">
+        <input type="checkbox" id="cfg-remote-enabled" onchange="toggleRemoteControls()">
+        <span>Разрешить подключение по сети (LAN / VPN)</span>
+      </label>
+      <span class="hint-text">Открывает дашборд для сисадмина с других компьютеров</span>
+    </div>
+
+    <div class="form-group">
+      <label>Порт удалённого веб-интерфейса:</label>
+      <input type="number" id="cfg-remote-port" class="form-control" value="48123" min="1024" max="65535">
+      <span class="hint-text">По умолчанию: 48123 (Требуется разрешение в Брандмауэре)</span>
+    </div>
+
+    <div class="form-group">
+      <label>Логин администратора (Basic Auth):</label>
+      <input type="text" id="cfg-auth-user" class="form-control" placeholder="admin">
+      <span class="hint-text">Защита от несанкционированного входа из сети</span>
+    </div>
+
+    <div class="form-group">
+      <label>Пароль администратора:</label>
+      <input type="password" id="cfg-auth-pass" class="form-control" placeholder="Укажите надежный пароль">
+      <span class="hint-text">Локальный доступ (127.0.0.1) открывается без пароля</span>
+    </div>
+
+    <div class="form-group">
+      <label>Белый список сетей / IP (Whitelist):</label>
+      <input type="text" id="cfg-ip-whitelist" class="form-control" placeholder="192.168.1.0/24, 10.0.0.15">
+      <span class="hint-text">Оставьте пустым для доступа из всей локальной сети</span>
+    </div>
+
+    <div class="form-group" style="grid-column: 1 / -1;">
+      <label>Сценарий аварийного бэкапа при сбое диска (.bat / .cmd / .ps1):</label>
+      <input type="text" id="cfg-backup-script" class="form-control" placeholder="C:\Scripts\emergency_backup_1c.bat">
+      <span class="hint-text">Скрипт выполнится скрытно в фоне при критическом перегреве, бэдах или износе ячеек</span>
+    </div>
+  </div>
+
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px; border-top: 1px solid var(--border); padding-top: 16px; flex-wrap: wrap; gap: 10px;">
+    <div style="display: flex; gap: 10px; align-items: center; flex: 1; min-width: 280px;">
+      <input id="key-input" class="form-control" style="font-family: monospace; font-size: 11px;" type="text" placeholder="Лицензионный ключ PRO...">
+      <button class="btn-action btn-secondary" onclick="applyKey()">Активировать</button>
+    </div>
+    <button class="btn-action" onclick="saveProSettings()">💾 Сохранить настройки PRO</button>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <div class="card-title">Системный том C: <span id="space-state" class="chip chip-ok">В НОРМЕ</span></div>
+    <div class="metric-value"><span id="free-gb">0.0</span> <span style="font-size: 16px; font-weight: 400; color: var(--text-muted);">ГБ свободно</span></div>
+    <div class="metric-sub">Занято <span id="used-gb">0.0</span> ГБ из <span id="total-gb">0.0</span> ГБ (<span id="free-pct">0</span>% свободно)</div>
+    <div class="progress-bar-wrap">
+      <div id="space-progress" class="progress-bar-inner"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Температуры системы (Плата / ЦП)</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <div>
+        <div class="metric-value" id="cpu-temp-val">0°C</div>
+        <div class="metric-sub" style="margin-bottom: 8px;">Процессор</div>
+        <div class="threshold-control">
+          Порог: 
+          <input id="thresh-input-cpu" class="threshold-input" type="number" min="20" max="100" value="70"> °C
+        </div>
+      </div>
+      <div>
+        <div class="metric-value" id="mb-temp-val">0°C</div>
+        <div class="metric-sub" style="margin-bottom: 8px;">Мат. плата</div>
+        <div class="threshold-control">
+          Порог: 
+          <input id="thresh-input-mb" class="threshold-input" type="number" min="20" max="80" value="50"> °C
+        </div>
+      </div>
+    </div>
+    <div class="progress-bar-wrap" style="display: flex; gap: 6px; background: transparent; height: 6px; margin-top: 14px;">
+      <div id="cpu-bar" style="height: 100%; border-radius: 3px; width: 50%; background: var(--green);"></div>
+      <div id="mb-bar" style="height: 100%; border-radius: 3px; width: 50%; background: var(--green);"></div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom: 24px;">
+  <div class="card-title">Физические накопители, износ и наработка</div>
+  <div id="drives-container" class="drive-list">
+    <div style="color: var(--text-muted); font-size: 14px;">Опрос контроллеров оборудования...</div>
+  </div>
+</div>
+
+<div class="card-title" style="margin-bottom: 12px;">
+  <span>Линейные графики температур накопителей (Шкала: 20°C — 80°C)</span>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-box" style="background: rgba(16, 185, 129, 0.25); border: 1px solid var(--green);"></div> Безопасная зона</div>
+    <div class="legend-item"><div class="legend-box" style="background: rgba(239, 68, 68, 0.2); border: 1px solid var(--red);"></div> Критическая зона (порог)</div>
+  </div>
+</div>
+
+<div id="temp-charts-container" class="charts-grid"></div>
+
+<div class="chart-card" style="margin-bottom: 24px;">
+  <div class="card-title">Динамика свободного объема системного тома C: (ГБ)</div>
+  <svg id="chart-space" viewBox="0 0 700 160"></svg>
+</div>
+
+<script>
+let driveThresholds = {};
+let currentMode = 'FREE';
+
+function toggleRemoteControls() {
+  const enabled = document.getElementById('cfg-remote-enabled').checked;
+  document.getElementById('cfg-remote-port').disabled = !enabled;
+  document.getElementById('cfg-auth-user').disabled = !enabled;
+  document.getElementById('cfg-auth-pass').disabled = !enabled;
+  document.getElementById('cfg-ip-whitelist').disabled = !enabled;
+}
+
+async function applyKey() {
+  const key = document.getElementById('key-input').value.trim();
+  if (!key) return alert("Введите лицензионный ключ");
+  try {
+    const res = await fetch('/api/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ license_key: key })
+    });
+    const result = await res.json();
+    if (result.success) {
+      alert("Лицензия PRO успешно активирована!");
+      refreshData();
+    } else {
+      alert("Ошибка: " + result.error);
+    }
+  } catch(e) { alert("Ошибка сети: " + e); }
+}
+
+async function saveProSettings() {
+  const payload = {
+    thresholds: driveThresholds,
+    cpu_threshold: parseInt(document.getElementById('thresh-input-cpu').value, 10),
+    mb_threshold: parseInt(document.getElementById('thresh-input-mb').value, 10),
+    poll_interval_min: parseInt(document.getElementById('cfg-poll-interval').value, 10),
+    remote_access_enabled: document.getElementById('cfg-remote-enabled').checked,
+    remote_port: parseInt(document.getElementById('cfg-remote-port').value, 10),
+    auth_user: document.getElementById('cfg-auth-user').value.trim(),
+    auth_pass: document.getElementById('cfg-auth-pass').value.trim(),
+    ip_whitelist: document.getElementById('cfg-ip-whitelist').value.trim(),
+    backup_script: document.getElementById('cfg-backup-script').value.trim()
+  };
+
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      alert("Настройки PRO сохранены и применены!");
+      refreshData();
+    } else {
+      alert("Ошибка сохранения параметров");
+    }
+  } catch(e) { alert("Ошибка: " + e); }
+}
+
+async function saveDriveThreshold(index) {
+  const val = parseInt(document.getElementById(`thresh-input-${index}`).value, 10);
+  if (isNaN(val) || val < 30 || val > 75) {
+    return alert("Укажите порог от 30°C до 75°C");
+  }
+  driveThresholds[index] = val;
+  saveProSettings();
+}
+
+async function refreshData() {
+  try {
+    const res = await fetch('/api/data');
+    const data = await res.json();
+    const r = data.report || {};
+    const h = data.history || [];
+    const cfg = data.config || {};
+    
+    driveThresholds = cfg.thresholds || {};
+    currentMode = r.mode || 'FREE';
+
+    // Бейдж редакции
+    const badge = document.getElementById('mode-badge');
+    badge.innerText = 'Режим: ' + currentMode;
+    badge.className = 'badge ' + (currentMode === 'PRO' ? 'badge-pro' : 'badge-free');
+
+    const ownerEl = document.getElementById('license-owner');
+    if (data.license_client) {
+      ownerEl.innerText = `Лицензиат: ${data.license_client} (до ${data.license_expires_str})`;
+    } else {
+      ownerEl.innerText = 'Бесплатная редакция (ограниченный функционал)';
+    }
+
+    // Заполнение формы настроек PRO
+    document.getElementById('cfg-poll-interval').value = (cfg.poll_interval_min || 120).toString();
+    document.getElementById('cfg-remote-enabled').checked = !!cfg.remote_access_enabled;
+    document.getElementById('cfg-remote-port').value = cfg.remote_port || 48123;
+    document.getElementById('cfg-auth-user').value = cfg.auth_user || '';
+    document.getElementById('cfg-auth-pass').value = cfg.auth_pass || '';
+    document.getElementById('cfg-ip-whitelist').value = cfg.ip_whitelist || '';
+    document.getElementById('cfg-backup-script').value = cfg.backup_script || '';
+    document.getElementById('thresh-input-cpu').value = cfg.cpu_threshold || 70;
+    document.getElementById('thresh-input-mb').value = cfg.mb_threshold || 50;
+
+    const remoteInd = document.getElementById('remote-indicator');
+    if (cfg.remote_access_enabled) {
+      remoteInd.style.display = 'inline-block';
+      remoteInd.innerText = `Удалённый доступ: порт ${cfg.remote_port || 48123}`;
+    } else {
+      remoteInd.style.display = 'none';
+    }
+
+    // Ограничения для Free режима
+    const isFree = currentMode === 'FREE';
+    document.getElementById('cfg-poll-interval').disabled = isFree;
+    document.getElementById('cfg-remote-enabled').disabled = isFree;
+    document.getElementById('cfg-backup-script').disabled = isFree;
+    toggleRemoteControls();
+
+    document.getElementById('last-update').innerText = 'Обновлено: ' + new Date().toLocaleTimeString();
+
+    // 1. Системный том C:
+    if (r.system) {
+      const free = r.system.free_gb || 0;
+      const total = r.system.total_gb || 1;
+      const used = Math.max(0, total - free);
+      const freePct = r.system.free_percent || 0;
+      const usedPct = Math.min(100, Math.max(0, (used / total) * 100));
+
+      document.getElementById('free-gb').innerText = free.toFixed(1);
+      document.getElementById('used-gb').innerText = used.toFixed(1);
+      document.getElementById('total-gb').innerText = total.toFixed(1);
+      document.getElementById('free-pct').innerText = freePct.toFixed(0);
+
+      const pFill = document.getElementById('space-progress');
+      pFill.style.width = usedPct.toFixed(1) + '%';
+      pFill.style.background = r.system.health_state === 'CRITICAL' ? 'var(--red)' : (r.system.health_state === 'WARNING' ? 'var(--orange)' : 'var(--green)');
+
+      const spaceState = document.getElementById('space-state');
+      spaceState.innerText = r.system.health_state === 'CRITICAL' ? 'КРИТИЧНО' : (r.system.health_state === 'WARNING' ? 'ВНИМАНИЕ' : 'В НОРМЕ');
+      spaceState.className = 'chip ' + (r.system.health_state === 'CRITICAL' ? 'chip-crit' : (r.system.health_state === 'WARNING' ? 'chip-warn' : 'chip-ok'));
+
+      const cpuT = r.system.cpu_temp_c || 42;
+      const mbT = r.system.mb_temp_c || 36;
+      document.getElementById('cpu-temp-val').innerText = cpuT + '°C';
+      document.getElementById('mb-temp-val').innerText = mbT + '°C';
+      document.getElementById('cpu-bar').style.width = Math.min(100, cpuT) + '%';
+      document.getElementById('mb-bar').style.width = Math.min(100, (mbT/80)*100) + '%';
+    }
+
+    // 2. Список накопителей
+    const drives = r.drives || [];
+    const dContainer = document.getElementById('drives-container');
+    dContainer.innerHTML = '';
+    
+    if (drives.length === 0) {
+      dContainer.innerHTML = '<div style="color:var(--orange);">Физические накопители не найдены. Запустите приложение от имени Администратора.</div>';
+    } else {
+      drives.forEach(d => {
+        const userCrit = driveThresholds[d.index] || 50;
+        const isCrit = d.temperature_c >= userCrit || d.health_state === 'CRITICAL';
+        const isWarn = d.temperature_c >= (userCrit - 5) || d.health_state === 'WARNING';
+        const chipClass = isCrit ? 'chip-crit' : (isWarn ? 'chip-warn' : 'chip-ok');
+
+        const hours = d.power_on_hours || 0;
+        const days = Math.floor(hours / 24);
+        const powerOnStr = `${hours.toLocaleString()} ч (~${days} дн)`;
+
+        dContainer.innerHTML += `
+          <div class="drive-item">
+            <div class="drive-head">
+              <div class="drive-name">
+                <span>💾 PhysicalDrive${d.index}:</span> 
+                <span>${d.model}</span> 
+                <span style="font-size:12px; color:var(--text-muted); font-weight:400;">(${d.interface})</span>
+              </div>
+              <div class="drive-badges">
+                <div class="threshold-control">
+                  Порог: 
+                  <input id="thresh-input-${d.index}" class="threshold-input" type="number" value="${userCrit}" min="30" max="75"> °C
+                  <button class="btn-action" style="padding: 2px 8px;" onclick="saveDriveThreshold(${d.index})">ОК</button>
+                </div>
+                <span class="chip" style="background:rgba(255,255,255,0.06);">Темп: ${d.temperature_c}°C</span>
+                <span class="chip ${chipClass}">${d.health_state}</span>
+              </div>
+            </div>
+            <div class="params-grid">
+              <div>Износ ячеек памяти: <strong>${d.wear_percent >= 0 ? d.wear_percent + '%' : '0%'}</strong></div>
+              <div>Остаток резерва (Spare): <strong>${d.available_spare >= 0 ? d.available_spare + '%' : '100%'}</strong></div>
+              <div>Время наработки: <strong>${powerOnStr}</strong></div>
+              <div>Ошибки целостности: <strong>${d.media_errors}</strong></div>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // 3. Графики температур
+    const tempContainer = document.getElementById('temp-charts-container');
+    if (tempContainer.children.length !== drives.length) {
+      tempContainer.innerHTML = '';
+      drives.forEach(d => {
+        tempContainer.innerHTML += `
+          <div class="chart-card">
+            <div class="card-title">
+              <span>Динамика температуры: <strong>PhysicalDrive${d.index} (${d.model})</strong></span>
+              <span class="chip" id="temp-badge-${d.index}">0°C</span>
+            </div>
+            <svg id="chart-temp-${d.index}" viewBox="0 0 700 170"></svg>
+          </div>
+        `;
+      });
+    }
+
+    const labels = h.map(x => x.time_label || '');
+    drives.forEach(d => {
+      const userCrit = driveThresholds[d.index] || 50;
+      let driveTemps = h.map(snap => {
+        if (!snap.drives) return d.temperature_c;
+        const found = snap.drives.find(dr => dr.index === d.index);
+        return found ? found.temperature_c : d.temperature_c;
+      });
+
+      if (driveTemps.length < 2) driveTemps = [d.temperature_c, d.temperature_c];
+      renderZonedLineChart(`chart-temp-${d.index}`, driveTemps, labels, userCrit, d.index);
+      
+      const badge = document.getElementById(`temp-badge-${d.index}`);
+      if (badge) badge.innerText = d.temperature_c + '°C';
+    });
+
+    // 4. График пространства C:
+    let spaceValues = h.map(x => x.free_gb || 0);
+    if (r.system && spaceValues.length < 2) spaceValues = [r.system.free_gb, r.system.free_gb];
+    renderSpaceChart('chart-space', spaceValues, labels, Math.max(50, ...spaceValues));
+
+  } catch(e) { console.error(e); }
+}
+
+function renderZonedLineChart(svgId, values, labels, critThreshold, diskIdx) {
+  const svg = document.getElementById(svgId);
+  if (!svg) return;
+  const w = 700, h = 160, padLeft = 45, padRight = 30, topPad = 15, bottomPad = 25;
+  const graphHeight = h - topPad - bottomPad;
+  const graphWidth = w - padLeft - padRight;
+  const minTemp = 20, maxTemp = 80;
+
+  const getY = (temp) => {
+    const clamped = Math.max(minTemp, Math.min(maxTemp, temp));
+    return topPad + graphHeight - ((clamped - minTemp) / (maxTemp - minTemp)) * graphHeight;
+  };
+  const dangerY = getY(critThreshold);
+
+  let svgContent = `
+    <defs>
+      <linearGradient id="grad-curve-${diskIdx}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.35"/>
+        <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.0"/>
+      </linearGradient>
+    </defs>
+    <rect x="${padLeft}" y="${topPad}" width="${graphWidth}" height="${dangerY - topPad}" fill="rgba(239, 68, 68, 0.12)" />
+    <rect x="${padLeft}" y="${dangerY}" width="${graphWidth}" height="${(topPad + graphHeight) - dangerY}" fill="rgba(16, 185, 129, 0.08)" />
+  `;
+
+  [20, 30, 40, 50, 60, 70, 80].forEach(deg => {
+    const y = getY(deg);
+    svgContent += `
+      <line class="grid-line" x1="${padLeft}" y1="${y}" x2="${w - padRight}" y2="${y}" />
+      <text class="axis-label" x="${padLeft - 8}" y="${y + 4}" text-anchor="end">${deg}°C</text>
+    `;
+  });
+
+  svgContent += `
+    <line class="danger-line" x1="${padLeft}" y1="${dangerY}" x2="${w - padRight}" y2="${dangerY}" />
+    <text class="danger-text" x="${w - padRight - 5}" y="${dangerY - 5}" text-anchor="end">ПОРОГ ${critThreshold}°C</text>
+  `;
+
+  if (values && values.length >= 2) {
+    const step = graphWidth / (values.length - 1);
+    let points = values.map((v, i) => ({ x: padLeft + i * step, y: getY(v) }));
+    let pathD = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+    for (let i = 0; i < points.length - 1; i++) {
+      const cpX = ((points[i].x + points[i+1].x) / 2).toFixed(1);
+      pathD += ` C ${cpX} ${points[i].y.toFixed(1)}, ${cpX} ${points[i+1].y.toFixed(1)}, ${points[i+1].x.toFixed(1)} ${points[i+1].y.toFixed(1)}`;
+    }
+    const areaD = pathD + ` L ${points[points.length-1].x.toFixed(1)} ${(topPad + graphHeight).toFixed(1)} L ${points[0].x.toFixed(1)} ${(topPad + graphHeight).toFixed(1)} Z`;
+    svgContent += `<path d="${areaD}" fill="url(#grad-curve-${diskIdx})" /><path d="${pathD}" class="spline-line" />`;
+    svgContent += `<text class="axis-label" x="${padLeft}" y="${h - 4}">${labels[0] || ''}</text><text class="axis-label" x="${w - padRight}" y="${h - 4}" text-anchor="end">${labels[labels.length - 1] || 'Сейчас'}</text>`;
+  }
+  svg.innerHTML = svgContent;
+}
+
+function renderSpaceChart(svgId, values, labels, maxGB) {
+  const svg = document.getElementById(svgId);
+  if (!svg) return;
+  const w = 700, h = 150, padLeft = 45, padRight = 30, topPad = 15, bottomPad = 25;
+  const graphHeight = h - topPad - bottomPad;
+  const graphWidth = w - padLeft - padRight;
+  const getY = (gb) => topPad + graphHeight - (Math.max(0, Math.min(maxGB, gb)) / (maxGB || 1)) * graphHeight;
+
+  let svgContent = `<defs><linearGradient id="grad-space" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10b981" stop-opacity="0.35"/><stop offset="100%" stop-color="#10b981" stop-opacity="0.0"/></linearGradient></defs>`;
+  [0, maxGB * 0.5, maxGB].forEach(val => {
+    const y = getY(val);
+    svgContent += `<line class="grid-line" x1="${padLeft}" y1="${y}" x2="${w - padRight}" y2="${y}" /><text class="axis-label" x="${padLeft - 8}" y="${y + 4}" text-anchor="end">${val.toFixed(0)}ГБ</text>`;
+  });
+
+  if (values && values.length >= 2) {
+    const step = graphWidth / (values.length - 1);
+    let points = values.map((v, i) => ({ x: padLeft + i * step, y: getY(v) }));
+    let pathD = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+    for (let i = 0; i < points.length - 1; i++) {
+      const cpX = ((points[i].x + points[i+1].x) / 2).toFixed(1);
+      pathD += ` C ${cpX} ${points[i].y.toFixed(1)}, ${cpX} ${points[i+1].y.toFixed(1)}, ${points[i+1].x.toFixed(1)} ${points[i+1].y.toFixed(1)}`;
+    }
+    const areaD = pathD + ` L ${points[points.length-1].x.toFixed(1)} ${(topPad + graphHeight).toFixed(1)} L ${points[0].x.toFixed(1)} ${(topPad + graphHeight).toFixed(1)} Z`;
+    svgContent += `<path d="${areaD}" fill="url(#grad-space)" /><path d="${pathD}" class="spline-space-line" />`;
+    svgContent += `<text class="axis-label" x="${padLeft}" y="${h - 4}">${labels[0] || ''}</text><text class="axis-label" x="${w - padRight}" y="${h - 4}" text-anchor="end">${labels[labels.length - 1] || 'Сейчас'}</text>`;
+  }
+  svg.innerHTML = svgContent;
+}
+
+refreshData();
+setInterval(refreshData, 30000);
+</script>
+</body>
+</html>

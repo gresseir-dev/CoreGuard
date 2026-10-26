@@ -1,0 +1,5 @@
+﻿*.exe
+*.lock
+config.json
+history.json
+keygen.go
