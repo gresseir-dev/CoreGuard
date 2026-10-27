@@ -194,7 +194,8 @@ type Config struct {
     Thresholds          map[int]int `json:"thresholds"`
     CpuThreshold        int         `json:"cpu_threshold"`
     MbThreshold         int         `json:"mb_threshold"`
-    SpaceThresholdPct   int         `json:"space_threshold_pct"` // Порог свободного места в %
+    SpaceThresholdPct   int         `json:"space_threshold_pct"`
+    Language            string      `json:"language"`
 }
 
 type DriveInfo struct {
@@ -269,7 +270,7 @@ func verifyLicenseKey(keyStr string) (LicensePayload, error) {
 
     parts := strings.Split(cleanKey, ".")
     if len(parts) != 2 {
-        return LicensePayload{}, fmt.Errorf("неверный формат ключа")
+        return LicensePayload{}, fmt.Errorf("invalid format")
     }
 
     decodeB64 := func(s string) ([]byte, error) {
@@ -287,30 +288,30 @@ func verifyLicenseKey(keyStr string) (LicensePayload, error) {
 
     payloadBytes, err := decodeB64(parts[0])
     if err != nil {
-        return LicensePayload{}, fmt.Errorf("ошибка распаковки")
+        return LicensePayload{}, fmt.Errorf("unpack error")
     }
 
     sigBytes, err := decodeB64(parts[1])
     if err != nil {
-        return LicensePayload{}, fmt.Errorf("ошибка подписи")
+        return LicensePayload{}, fmt.Errorf("signature error")
     }
 
     pubKeyBytes, err := hex.DecodeString(LicensePublicKeyHex)
     if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
-        return LicensePayload{}, fmt.Errorf("ошибка публичного ключа")
+        return LicensePayload{}, fmt.Errorf("public key error")
     }
 
     if !ed25519.Verify(pubKeyBytes, payloadBytes, sigBytes) {
-        return LicensePayload{}, fmt.Errorf("криптографическая подпись ключа не совпадает")
+        return LicensePayload{}, fmt.Errorf("cryptographic signature mismatch")
     }
 
     var payload LicensePayload
     if err := json.Unmarshal(payloadBytes, &payload); err != nil {
-        return LicensePayload{}, fmt.Errorf("ошибка данных лицензии")
+        return LicensePayload{}, fmt.Errorf("payload error")
     }
 
     if payload.ExpiresAt > 0 && time.Now().Unix() > payload.ExpiresAt {
-        return LicensePayload{Tier: "FREE", MinIntervalSec: 7200}, fmt.Errorf("срок действия лицензии истёк")
+        return LicensePayload{Tier: "FREE", MinIntervalSec: 7200}, fmt.Errorf("license expired")
     }
 
     return payload, nil
@@ -373,8 +374,8 @@ func acquireSingleInstanceGuard() bool {
 }
 
 func notifyAlreadyRunning() {
-    title, _ := windows.UTF16PtrFromString("StorageGuard уже запущен")
-    msg, _ := windows.UTF16PtrFromString("Программа уже работает и находится в системном трее!\n\nКликните правой кнопкой мыши по значку накопителя в трее для открытия дашборда.")
+    title, _ := windows.UTF16PtrFromString("StorageGuard")
+    msg, _ := windows.UTF16PtrFromString("StorageGuard is already running in the system tray!\nRight-click the drive icon to open the dashboard.")
     const MB_ICONWARNING = 0x00000030
     const MB_OK = 0x00000000
     procMessageBoxW.Call(0, uintptr(unsafe.Pointer(msg)), uintptr(unsafe.Pointer(title)), MB_OK|MB_ICONWARNING)
@@ -393,7 +394,8 @@ func loadConfig() {
         Thresholds:          make(map[int]int),
         CpuThreshold:        70,
         MbThreshold:         50,
-        SpaceThresholdPct:   10, // 10% по умолчанию
+        SpaceThresholdPct:   10,
+        Language:            "RU",
     }
     if fileData, err := os.ReadFile(configFileName); err == nil {
         _ = json.Unmarshal(fileData, &globalConfig)
@@ -409,6 +411,9 @@ func loadConfig() {
     }
     if globalConfig.SpaceThresholdPct < 5 || globalConfig.SpaceThresholdPct > 50 {
         globalConfig.SpaceThresholdPct = 10
+    }
+    if globalConfig.Language != "ENG" {
+        globalConfig.Language = "RU"
     }
     if globalConfig.RemotePort <= 0 || globalConfig.RemotePort > 65535 {
         globalConfig.RemotePort = 48123
@@ -527,7 +532,6 @@ func showTrayNotification(title, msg string, isCritical bool) {
     procShellNotifyIconW.Call(NIM_MODIFY, uintptr(unsafe.Pointer(&nid)))
 }
 
-// Проверка диска C: с учётом настраиваемого порога в процентах
 func checkSystemDrive() SystemHealth {
     drivePath, _ := windows.UTF16PtrFromString("C:\\")
     var freeBytes, totalBytes, totalFree uint64
@@ -797,11 +801,11 @@ $res | ConvertTo-Json -Compress
         var alerts []string
         if temp >= userCrit {
             hState = "CRITICAL"
-            alerts = append(alerts, fmt.Sprintf("Температура выше порога (%d°C >= %d°C)", temp, userCrit))
+            alerts = append(alerts, fmt.Sprintf("High temperature (%d°C >= %d°C)", temp, userCrit))
         }
         if wear >= 95 {
             hState = "WARNING"
-            alerts = append(alerts, fmt.Sprintf("Износ SSD выше 95%%: %d%%", wear))
+            alerts = append(alerts, fmt.Sprintf("SSD Wear > 95%%: %d%%", wear))
         }
 
         results = append(results, DriveInfo{
@@ -887,34 +891,52 @@ func runCheckCycle() {
     pruneHistory()
     saveHistory()
 
-    tipText := fmt.Sprintf("StorageGuard (%s)\nИнтервал: %d мин | Дисков: %d\nC: %.1f GB (%.0f%%) свободно",
+    isRu := globalConfig.Language != "ENG"
+    tipText := fmt.Sprintf("StorageGuard (%s)\n%d min | Drives: %d\nC: %.1f GB (%.0f%%) free",
         globalConfig.Mode, globalConfig.PollIntervalMin, len(report.Drives), report.System.FreeGB, report.System.FreePercent)
-    if hasCritical {
-        tipText = fmt.Sprintf("StorageGuard (%s)\nВНИМАНИЕ: СБОЙ/ПЕРЕГРЕВ!\nДисков: %d | C: %.1f GB",
-            globalConfig.Mode, len(report.Drives), report.System.FreeGB)
+    if isRu {
+        tipText = fmt.Sprintf("StorageGuard (%s)\n%d мин | Дисков: %d\nC: %.1f GB (%.0f%%) свободно",
+            globalConfig.Mode, globalConfig.PollIntervalMin, len(report.Drives), report.System.FreeGB, report.System.FreePercent)
     }
+
+    if hasCritical {
+        if isRu {
+            tipText = fmt.Sprintf("StorageGuard (%s)\nВНИМАНИЕ: СБОЙ/ПЕРЕГРЕВ!\nДисков: %d | C: %.1f GB",
+                globalConfig.Mode, len(report.Drives), report.System.FreeGB)
+        } else {
+            tipText = fmt.Sprintf("StorageGuard (%s)\nALERT: OVERHEAT/DEGRADATION!\nDrives: %d | C: %.1f GB",
+                globalConfig.Mode, len(report.Drives), report.System.FreeGB)
+        }
+    }
+
     nid.UFlags = NIF_TIP
     copyToUTF16Fixed(nid.SzTip[:], tipText)
     procShellNotifyIconW.Call(NIM_MODIFY, uintptr(unsafe.Pointer(&nid)))
 
     if sysHealth.CpuState == "CRITICAL" {
-        showTrayNotification(
-            "Внимание! Перегрев процессора!",
-            fmt.Sprintf("Температура ЦП достигла %d°C (выше порога %d°C)!", sysHealth.CpuTemp, globalConfig.CpuThreshold),
-            true,
-        )
+        tTitle := "Внимание! Перегрев процессора!"
+        tMsg := fmt.Sprintf("Температура ЦП достигла %d°C (выше порога %d°C)!", sysHealth.CpuTemp, globalConfig.CpuThreshold)
+        if !isRu {
+            tTitle = "Alert! CPU Overheating!"
+            tMsg = fmt.Sprintf("CPU temperature reached %d°C (threshold: %d°C)!", sysHealth.CpuTemp, globalConfig.CpuThreshold)
+        }
+        showTrayNotification(tTitle, tMsg, true)
     } else if sysHealth.MbState == "CRITICAL" {
-        showTrayNotification(
-            "Внимание! Перегрев мат. платы!",
-            fmt.Sprintf("Температура платы достигла %d°C (выше порога %d°C)!", sysHealth.MbTemp, globalConfig.MbThreshold),
-            true,
-        )
+        tTitle := "Внимание! Перегрев мат. платы!"
+        tMsg := fmt.Sprintf("Температура платы достигла %d°C (выше порога %d°C)!", sysHealth.MbTemp, globalConfig.MbThreshold)
+        if !isRu {
+            tTitle = "Alert! Motherboard Overheating!"
+            tMsg = fmt.Sprintf("Motherboard temperature reached %d°C (threshold: %d°C)!", sysHealth.MbTemp, globalConfig.MbThreshold)
+        }
+        showTrayNotification(tTitle, tMsg, true)
     } else if sysHealth.SpaceState == "CRITICAL" {
-        showTrayNotification(
-            "Внимание! Диск C: переполнен!",
-            fmt.Sprintf("Свободно всего %.1f ГБ (%.1f%%, ниже порога %d%%)!", sysHealth.FreeGB, sysHealth.FreePercent, globalConfig.SpaceThresholdPct),
-            true,
-        )
+        tTitle := "Внимание! Диск C: переполнен!"
+        tMsg := fmt.Sprintf("Свободно всего %.1f ГБ (%.1f%%, ниже порога %d%%)!", sysHealth.FreeGB, sysHealth.FreePercent, globalConfig.SpaceThresholdPct)
+        if !isRu {
+            tTitle = "Alert! Drive C: Out of Space!"
+            tMsg = fmt.Sprintf("Only %.1f GB (%.1f%%, below threshold %d%%) remaining!", sysHealth.FreeGB, sysHealth.FreePercent, globalConfig.SpaceThresholdPct)
+        }
+        showTrayNotification(tTitle, tMsg, true)
     }
 
     if hasCritical && globalConfig.Mode == "PRO" {
@@ -993,7 +1015,10 @@ func buildAppRouter() *http.ServeMux {
         defer stateMu.RUnlock()
 
         w.Header().Set("Content-Type", "application/json")
-        expStr := "Бессрочно"
+        expStr := "Permanent"
+        if globalConfig.Language != "ENG" {
+            expStr = "Бессрочно"
+        }
         if activeLicense.ExpiresAt > 0 {
             expStr = time.Unix(activeLicense.ExpiresAt, 0).Format("02.01.2006")
         }
@@ -1014,7 +1039,7 @@ func buildAppRouter() *http.ServeMux {
             LicenseKey string `json:"license_key"`
         }
         if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-            _ = json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "Некорректный запрос"})
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "Invalid request"})
             return
         }
 
@@ -1069,6 +1094,9 @@ func buildAppRouter() *http.ServeMux {
                 }
                 if body.SpaceThresholdPct >= 5 && body.SpaceThresholdPct <= 50 {
                     globalConfig.SpaceThresholdPct = body.SpaceThresholdPct
+                }
+                if body.Language == "ENG" || body.Language == "RU" {
+                    globalConfig.Language = body.Language
                 }
                 if body.Thresholds != nil {
                     for k, v := range body.Thresholds {
@@ -1165,12 +1193,23 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
             hMenu, _, _ := procCreatePopupMenu.Call()
 
             stateMu.RLock()
-            statusStr := utf16FromString(fmt.Sprintf("Статус: [%s] Накопителей: %d | C: %.1f ГБ (%s)", globalConfig.Mode, len(globalReport.Drives), globalReport.System.FreeGB, globalReport.System.HealthState))
+            isRu := globalConfig.Language != "ENG"
+            statusText := fmt.Sprintf("Статус: [%s] Накопителей: %d | C: %.1f ГБ (%s)", globalConfig.Mode, len(globalReport.Drives), globalReport.System.FreeGB, globalReport.System.HealthState)
+            chartsText := "Открыть дашборд накопителей"
+            checkText := "Проверить накопители сейчас"
+            exitText := "Выход"
+            if !isRu {
+                statusText = fmt.Sprintf("Status: [%s] Drives: %d | C: %.1f GB (%s)", globalConfig.Mode, len(globalReport.Drives), globalReport.System.FreeGB, globalReport.System.HealthState)
+                chartsText = "Open Storage Dashboard"
+                checkText = "Check Drives Now"
+                exitText = "Exit"
+            }
             stateMu.RUnlock()
 
-            chartsStr := utf16FromString("Открыть дашборд накопителей")
-            checkStr := utf16FromString("Проверить накопители сейчас")
-            exitStr := utf16FromString("Выход")
+            statusStr := utf16FromString(statusText)
+            chartsStr := utf16FromString(chartsText)
+            checkStr := utf16FromString(checkText)
+            exitStr := utf16FromString(exitText)
 
             procAppendMenuW.Call(hMenu, MF_STRING, ID_TRAY_STATUS, uintptr(unsafe.Pointer(&statusStr[0])))
             procAppendMenuW.Call(hMenu, MF_STRING, ID_TRAY_CHARTS, uintptr(unsafe.Pointer(&chartsStr[0])))
@@ -1178,13 +1217,13 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
 
             if isTestMode {
                 hTestMenu, _, _ := procCreatePopupMenu.Call()
-                t1 := utf16FromString("1. Изменились критические параметры SMART")
-                t2 := utf16FromString("2. Критическая температура системы (ЦП / Плата >= порога)")
-                t3 := utf16FromString("3. Критическая температура накопителя (>= порога)")
-                t4 := utf16FromString("4. Нехватка места на C: (< порога)")
-                t5 := utf16FromString("5. Критический износ ячеек SSD (> 95%)")
-                t6 := utf16FromString("6. Обнаружены Pending Sectors (бэды)")
-                t7 := utf16FromString("7. [PRO] Аварийный запуск скрипта бэкапа")
+                t1 := utf16FromString("1. SMART Critical Error")
+                t2 := utf16FromString("2. System Overheating (CPU / Board)")
+                t3 := utf16FromString("3. Drive Overheating")
+                t4 := utf16FromString("4. Low Disk Space (C: < Threshold)")
+                t5 := utf16FromString("5. SSD Wear Critical (> 95%)")
+                t6 := utf16FromString("6. Pending Sectors Detected")
+                t7 := utf16FromString("7. [PRO] Emergency Backup Script Triggered")
 
                 procAppendMenuW.Call(hTestMenu, MF_STRING, ID_TEST_SMART_CRIT, uintptr(unsafe.Pointer(&t1[0])))
                 procAppendMenuW.Call(hTestMenu, MF_STRING, ID_TEST_SYS_TEMP, uintptr(unsafe.Pointer(&t2[0])))
@@ -1194,7 +1233,7 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
                 procAppendMenuW.Call(hTestMenu, MF_STRING, ID_TEST_PENDING, uintptr(unsafe.Pointer(&t6[0])))
                 procAppendMenuW.Call(hTestMenu, MF_STRING, ID_TEST_PRO_BACKUP, uintptr(unsafe.Pointer(&t7[0])))
 
-                testLabel := utf16FromString("[ТЕСТ] Отправить уведомление")
+                testLabel := utf16FromString("[TEST] Send Notification")
                 procAppendMenuW.Call(hMenu, MF_POPUP, hTestMenu, uintptr(unsafe.Pointer(&testLabel[0])))
                 procAppendMenuW.Call(hMenu, MF_SEPARATOR, 0, 0)
             }
@@ -1221,19 +1260,19 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
             procPostQuitMessage.Call(0)
 
         case ID_TEST_SMART_CRIT:
-            showTrayNotification("Внимание! Ошибка накопителя!", "Изменились критические параметры диска. Срочно обратитесь к администратору!", true)
+            showTrayNotification("Warning! Drive Failure!", "Critical SMART parameters altered. Contact administrator immediately!", true)
         case ID_TEST_SYS_TEMP:
-            showTrayNotification("Внимание! Перегрев системы!", "Критическая температура ЦП! Проверьте систему охлаждения!", true)
+            showTrayNotification("Warning! System Overheating!", "CPU temperature exceeded safe threshold! Check cooling fans!", true)
         case ID_TEST_DISK_TEMP:
-            showTrayNotification("Внимание! Перегрев накопителя!", "Зафиксирована критическая температура диска!", true)
+            showTrayNotification("Warning! Drive Overheating!", "Storage drive temperature reached critical threshold!", true)
         case ID_TEST_DISK_SPACE:
-            showTrayNotification("Внимание! Диск C: переполнен!", "Свободное место упало ниже критического порога! Риск повреждения баз 1С!", true)
+            showTrayNotification("Warning! Low Disk Space!", "Drive C: capacity dropped below safe margin!", true)
         case ID_TEST_SSD_WEAR:
-            showTrayNotification("Предупреждение: Износ SSD", "Износ ячеек памяти превысил 95%. Запланируйте замену.", false)
+            showTrayNotification("Warning: SSD Flash Wear", "Flash memory endurance exceeded 95%. Schedule drive replacement.", false)
         case ID_TEST_PENDING:
-            showTrayNotification("Внимание! Битые сектора!", "Обнаружены нестабильные сектора. Возможны зависания и потеря документов.", true)
+            showTrayNotification("Warning! Bad Sectors Detected!", "Drive reported unstable/pending sectors.", true)
         case ID_TEST_PRO_BACKUP:
-            showTrayNotification("StorageGuard PRO: Резервное копирование", "[PRO] Зафиксирована деградация накопителя. Запущен сценарий бэкапа.", false)
+            showTrayNotification("StorageGuard PRO: Backup Activated", "[PRO] Drive failure risk identified. Emergency backup script triggered.", false)
         }
         return 0
 
@@ -1305,7 +1344,7 @@ func main() {
         UCallbackMessage: WM_TRAY_NOTIFY,
         HIcon:            hIcon,
     }
-    copyToUTF16Fixed(nid.SzTip[:], "StorageGuard PRO: Запуск мониторинга...")
+    copyToUTF16Fixed(nid.SzTip[:], "StorageGuard PRO: Starting engine...")
     procShellNotifyIconW.Call(NIM_ADD, uintptr(unsafe.Pointer(&nid)))
 
     go runCheckCycle()

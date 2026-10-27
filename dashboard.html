@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>StorageGuard PRO - Телеметрия накопителей</title>
+<title>StorageGuard PRO</title>
 <style>
   :root {
     --bg: #0b0f19;
@@ -21,6 +21,13 @@
   
   .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
   .header h1 { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .header-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+  /* Переключатель языка */
+  .lang-switcher { display: flex; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .lang-btn { background: transparent; border: none; color: var(--text-muted); padding: 4px 10px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .lang-btn.active { background: #2563eb; color: #fff; }
+
   .badge { padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; border: 1px solid rgba(255,255,255,0.1); }
   .badge-free { background: rgba(156, 163, 175, 0.15); color: #9ca3af; border-color: rgba(156, 163, 175, 0.3); }
   .badge-pro { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: rgba(59, 130, 246, 0.4); }
@@ -86,126 +93,129 @@
 <body>
 
 <div class="header">
-  <h1>🛡️ StorageGuard PRO Telemetry</h1>
-  <div style="display: flex; gap: 10px; align-items: center;">
-    <span id="remote-indicator" class="chip chip-ok" style="display:none; font-size:11px;">LAN: Внешний доступ активен</span>
-    <span id="last-update" style="font-size: 12px; color: var(--text-muted);">Обновлено только что</span>
-    <div id="mode-badge" class="badge badge-free">Режим: FREE</div>
+  <h1 data-i18n="appTitle">🛡️ StorageGuard PRO Telemetry</h1>
+  <div class="header-actions">
+    <!-- Кнопки выбора языка -->
+    <div class="lang-switcher">
+      <button id="lang-ru" class="lang-btn active" onclick="setLanguage('RU')">RU</button>
+      <button id="lang-en" class="lang-btn" onclick="setLanguage('ENG')">ENG</button>
+    </div>
+
+    <span id="remote-indicator" class="chip chip-ok" style="display:none; font-size:11px;">LAN</span>
+    <span id="last-update" style="font-size: 12px; color: var(--text-muted);">...</span>
+    <div id="mode-badge" class="badge badge-free">Mode: FREE</div>
   </div>
 </div>
 
 <!-- БЛОК НАСТРОЕК PRO -->
 <div class="card" style="margin-bottom: 24px; border-color: rgba(59, 130, 246, 0.4);">
   <div class="card-title">
-    <span>⚙️ Параметры PRO: Удалённый дашборд и Автоматизация безопасности</span>
+    <span data-i18n="proParamsTitle">⚙️ Параметры PRO: Удалённый дашборд и Автоматизация безопасности</span>
     <span id="license-owner" style="font-size: 12px; color: #60a5fa; text-transform: none;">Лицензия не активирована</span>
   </div>
 
   <div class="form-grid">
     <div class="form-group">
-      <label>Частота опроса накопителей:</label>
+      <label data-i18n="lblPollInterval">Частота опроса накопителей:</label>
       <select id="cfg-poll-interval" class="form-control">
-        <option value="120">Каждые 2 часа (FREE)</option>
-        <option value="60">Каждый 1 час (PRO)</option>
-        <option value="30">Каждые 30 минут (PRO)</option>
-        <option value="15">Каждые 15 минут (PRO)</option>
-        <option value="5">Каждые 5 минут (PRO - Рекомендуется)</option>
-        <option value="1">Каждую 1 минуту (Enterprise)</option>
+        <option value="120" data-i18n="optPoll120">Каждые 2 часа (FREE)</option>
+        <option value="60" data-i18n="optPoll60">Каждый 1 час (PRO)</option>
+        <option value="30" data-i18n="optPoll30">Каждые 30 минут (PRO)</option>
+        <option value="15" data-i18n="optPoll15">Каждые 15 минут (PRO)</option>
+        <option value="5" data-i18n="optPoll5">Каждые 5 минут (PRO - Рекомендуется)</option>
+        <option value="1" data-i18n="optPoll1">Каждую 1 минуту (Enterprise)</option>
       </select>
-      <span class="hint-text">Периодичность аппаратного чтения SMART</span>
+      <span class="hint-text" data-i18n="hintPoll">Периодичность аппаратного чтения SMART</span>
     </div>
 
     <div class="form-group">
-      <label>Удалённый веб-доступ (Remote Dashboard):</label>
+      <label data-i18n="lblRemote">Удалённый веб-доступ (Remote Dashboard):</label>
       <label class="switch-row" style="margin-top: 6px;">
         <input type="checkbox" id="cfg-remote-enabled" onchange="toggleRemoteControls()">
-        <span>Разрешить подключение по сети (LAN / VPN)</span>
+        <span data-i18n="lblAllowRemote">Разрешить подключение по сети (LAN / VPN)</span>
       </label>
-      <span class="hint-text">Открывает дашборд для сисадмина с других компьютеров</span>
+      <span class="hint-text" data-i18n="hintRemote">Открывает дашборд для сисадмина с других компьютеров</span>
     </div>
 
     <div class="form-group">
-      <label>Порт удалённого веб-интерфейса:</label>
+      <label data-i18n="lblPort">Порт удалённого веб-интерфейса:</label>
       <input type="number" id="cfg-remote-port" class="form-control" value="48123" min="1024" max="65535">
-      <span class="hint-text">По умолчанию: 48123</span>
+      <span class="hint-text" data-i18n="hintPort">По умолчанию: 48123</span>
     </div>
 
     <div class="form-group">
-      <label>Логин администратора (Basic Auth):</label>
+      <label data-i18n="lblAuthUser">Логин администратора (Basic Auth):</label>
       <input type="text" id="cfg-auth-user" class="form-control" placeholder="admin">
-      <span class="hint-text">Защита от несанкционированного входа из сети</span>
+      <span class="hint-text" data-i18n="hintAuthUser">Защита от несанкционированного входа из сети</span>
     </div>
 
     <div class="form-group">
-      <label>Пароль администратора:</label>
-      <input type="password" id="cfg-auth-pass" class="form-control" placeholder="Укажите надежный пароль">
-      <span class="hint-text">Локальный доступ (127.0.0.1) открывается без пароля</span>
+      <label data-i18n="lblAuthPass">Пароль администратора:</label>
+      <input type="password" id="cfg-auth-pass" class="form-control" placeholder="******">
+      <span class="hint-text" data-i18n="hintAuthPass">Локальный доступ (127.0.0.1) открывается без пароля</span>
     </div>
 
     <div class="form-group">
-      <label>Белый список сетей / IP (Whitelist):</label>
+      <label data-i18n="lblWhitelist">Белый список сетей / IP (Whitelist):</label>
       <input type="text" id="cfg-ip-whitelist" class="form-control" placeholder="192.168.1.0/24, 10.0.0.15">
-      <span class="hint-text">Оставьте пустым для доступа из всей локальной сети</span>
+      <span class="hint-text" data-i18n="hintWhitelist">Оставьте пустым для доступа из всей локальной сети</span>
     </div>
 
     <div class="form-group" style="grid-column: 1 / -1;">
-      <label>Сценарий аварийного бэкапа при сбое диска (.bat / .cmd / .ps1):</label>
+      <label data-i18n="lblBackupScript">Сценарий аварийного бэкапа при сбое диска (.bat / .cmd / .ps1):</label>
       <input type="text" id="cfg-backup-script" class="form-control" placeholder="C:\Scripts\emergency_backup_1c.bat">
-      <span class="hint-text">Скрипт выполнится скрытно в фоне при критическом перегреве, бэдах или износе ячеек</span>
+      <span class="hint-text" data-i18n="hintBackupScript">Скрипт выполнится скрытно в фоне при критическом перегреве, бэдах или износе ячеек</span>
     </div>
   </div>
 
   <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px; border-top: 1px solid var(--border); padding-top: 16px; flex-wrap: wrap; gap: 10px;">
     <div style="display: flex; gap: 10px; align-items: center; flex: 1; min-width: 280px;">
-      <input id="key-input" class="form-control" style="font-family: monospace; font-size: 11px;" type="text" placeholder="Лицензионный ключ PRO...">
-      <button class="btn-action btn-secondary" onclick="applyKey()">Активировать</button>
+      <input id="key-input" class="form-control" style="font-family: monospace; font-size: 11px;" type="text" placeholder="License key...">
+      <button class="btn-action btn-secondary" onclick="applyKey()" data-i18n="btnActivate">Активировать</button>
     </div>
-    <button class="btn-action" onclick="saveProSettings()">💾 Сохранить настройки PRO</button>
+    <button class="btn-action" onclick="saveProSettings()" data-i18n="btnSavePro">💾 Сохранить настройки PRO</button>
   </div>
 </div>
 
 <div class="grid">
-  <!-- КАРТОЧКА ДИСКА C: КРУГОВАЯ ДИАГРАММА И ПОРОГ В % -->
+  <!-- КАРТОЧКА ДИСКА C: -->
   <div class="card" id="card-disk-c">
     <div class="card-title">
-      <span>Системный том C:</span>
-      <span id="space-state" class="chip chip-ok">В НОРМЕ</span>
+      <span data-i18n="cardSysDriveTitle">Системный том C:</span>
+      <span id="space-state" class="chip chip-ok">OK</span>
     </div>
 
     <div class="donut-container">
       <div class="donut-svg-wrap">
         <svg class="donut-svg" viewBox="0 0 42 42">
-          <!-- Фоновый круг (занятое место) -->
           <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="rgba(255,255,255,0.08)" stroke-width="4"></circle>
-          <!-- Дуга свободного места -->
           <circle id="donut-free-arc" cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="var(--green)" stroke-width="4" stroke-dasharray="0 100" stroke-linecap="round" style="transition: stroke-dasharray 0.6s ease, stroke 0.3s;"></circle>
         </svg>
         <div class="donut-center-text">
           <span id="donut-pct-text" class="donut-pct">0%</span>
-          <span class="donut-sub">СВОБОДНО</span>
+          <span class="donut-sub" data-i18n="donutSubFree">СВОБОДНО</span>
         </div>
       </div>
 
       <div class="donut-legend">
         <div class="donut-legend-row">
-          <span><span class="legend-dot" id="legend-dot-free" style="background: var(--green);"></span>Свободно:</span>
-          <strong><span id="free-gb">0.0</span> ГБ</strong>
+          <span><span class="legend-dot" id="legend-dot-free" style="background: var(--green);"></span><span data-i18n="legendFree">Свободно:</span></span>
+          <strong><span id="free-gb">0.0</span> <span data-i18n="unitGB">ГБ</span></strong>
         </div>
         <div class="donut-legend-row">
-          <span><span class="legend-dot" style="background: rgba(255,255,255,0.2);"></span>Занято:</span>
-          <strong><span id="used-gb">0.0</span> ГБ</strong>
+          <span><span class="legend-dot" style="background: rgba(255,255,255,0.2);"></span><span data-i18n="legendUsed">Занято:</span></span>
+          <strong><span id="used-gb">0.0</span> <span data-i18n="unitGB">ГБ</span></strong>
         </div>
         <div class="donut-legend-row" style="border-top: 1px solid var(--border); padding-top: 6px;">
-          <span style="color: var(--text-muted);">Общий объём:</span>
-          <strong><span id="total-gb">0.0</span> ГБ</strong>
+          <span style="color: var(--text-muted);" data-i18n="legendTotal">Общий объём:</span>
+          <strong><span id="total-gb">0.0</span> <span data-i18n="unitGB">ГБ</span></strong>
         </div>
 
-        <!-- БЛОК НАСТРОЙКИ КРИТИЧЕСКОГО ПОРОГА В % -->
         <div class="threshold-control" style="margin-top: 6px; justify-content: space-between;">
-          <span>Критич. порог:</span>
+          <span data-i18n="lblSpaceCritThresh">Критич. порог:</span>
           <div style="display:flex; align-items:center; gap:4px;">
             <input id="thresh-input-space-pct" class="threshold-input" type="number" min="5" max="50" value="10"> %
-            <button class="btn-action" style="padding: 2px 8px;" onclick="saveSpaceThreshold()">ОК</button>
+            <button class="btn-action" style="padding: 2px 8px;" onclick="saveSpaceThreshold()">OK</button>
           </div>
         </div>
       </div>
@@ -215,23 +225,23 @@
   <!-- КАРТОЧКА ЦП И ПЛАТЫ -->
   <div class="card" id="card-system-temps">
     <div class="card-title">
-      <span>Температуры системы (Плата / ЦП)</span>
-      <span id="sys-temp-badge" class="chip chip-ok">В НОРМЕ</span>
+      <span data-i18n="cardSysTempsTitle">Температуры системы (Плата / ЦП)</span>
+      <span id="sys-temp-badge" class="chip chip-ok">OK</span>
     </div>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 10px;">
       <div>
         <div class="metric-value" id="cpu-temp-val">0°C</div>
-        <div class="metric-sub" style="margin-bottom: 8px;">Процессор</div>
+        <div class="metric-sub" style="margin-bottom: 8px;" data-i18n="lblCpu">Процессор</div>
         <div class="threshold-control">
-          Порог: 
+          <span data-i18n="lblThresh">Порог:</span> 
           <input id="thresh-input-cpu" class="threshold-input" type="number" min="20" max="100" value="70"> °C
         </div>
       </div>
       <div>
         <div class="metric-value" id="mb-temp-val">0°C</div>
-        <div class="metric-sub" style="margin-bottom: 8px;">Мат. плата</div>
+        <div class="metric-sub" style="margin-bottom: 8px;" data-i18n="lblMotherboard">Мат. плата</div>
         <div class="threshold-control">
-          Порог: 
+          <span data-i18n="lblThresh">Порог:</span> 
           <input id="thresh-input-mb" class="threshold-input" type="number" min="20" max="80" value="50"> °C
         </div>
       </div>
@@ -244,21 +254,163 @@
 </div>
 
 <div class="card" style="margin-bottom: 24px;">
-  <div class="card-title">Физические накопители, износ и наработка</div>
+  <div class="card-title" data-i18n="cardDrivesTitle">Физические накопители, износ и наработка</div>
   <div id="drives-container" class="drive-list">
-    <div style="color: var(--text-muted); font-size: 14px;">Опрос контроллеров оборудования...</div>
+    <div style="color: var(--text-muted); font-size: 14px;" data-i18n="msgPollingDrives">Опрос контроллеров оборудования...</div>
   </div>
 </div>
 
 <div class="card-title" style="margin-bottom: 12px;">
-  <span>Линейные графики температур накопителей (Шкала: 20°C — 80°C)</span>
+  <span data-i18n="chartsTempTitle">Линейные графики температур накопителей (Шкала: 20°C — 80°C)</span>
 </div>
 
 <div id="temp-charts-container" class="charts-grid"></div>
 
 <script>
+const i18n = {
+  RU: {
+    appTitle: "🛡️ StorageGuard PRO Telemetry",
+    modeFree: "Режим: FREE",
+    modePro: "Режим: PRO",
+    modeEnterprise: "Режим: ENTERPRISE",
+    proParamsTitle: "⚙️ Параметры PRO: Удалённый дашборд и Автоматизация безопасности",
+    lblPollInterval: "Частота опроса накопителей:",
+    optPoll120: "Каждые 2 часа (FREE)",
+    optPoll60: "Каждый 1 час (PRO)",
+    optPoll30: "Каждые 30 минут (PRO)",
+    optPoll15: "Каждые 15 минут (PRO)",
+    optPoll5: "Каждые 5 минут (PRO - Рекомендуется)",
+    optPoll1: "Каждую 1 минуту (Enterprise)",
+    hintPoll: "Периодичность аппаратного чтения SMART",
+    lblRemote: "Удалённый веб-доступ (Remote Dashboard):",
+    lblAllowRemote: "Разрешить подключение по сети (LAN / VPN)",
+    hintRemote: "Открывает дашборд для сисадмина с других компьютеров",
+    lblPort: "Порт удалённого веб-интерфейса:",
+    hintPort: "По умолчанию: 48123",
+    lblAuthUser: "Логин администратора (Basic Auth):",
+    hintAuthUser: "Защита от несанкционированного входа из сети",
+    lblAuthPass: "Пароль администратора:",
+    hintAuthPass: "Локальный доступ (127.0.0.1) открывается без пароля",
+    lblWhitelist: "Белый список сетей / IP (Whitelist):",
+    hintWhitelist: "Оставьте пустым для доступа из всей локальной сети",
+    lblBackupScript: "Сценарий аварийного бэкапа при сбое диска (.bat / .cmd / .ps1):",
+    hintBackupScript: "Скрипт выполнится скрытно в фоне при критическом перегреве, бэдах или износе ячеек",
+    btnActivate: "Активировать",
+    btnSavePro: "💾 Сохранить настройки PRO",
+    cardSysDriveTitle: "Системный том C:",
+    donutSubFree: "СВОБОДНО",
+    legendFree: "Свободно:",
+    legendUsed: "Занято:",
+    legendTotal: "Общий объём:",
+    unitGB: "ГБ",
+    lblSpaceCritThresh: "Критич. порог:",
+    cardSysTempsTitle: "Температуры системы (Плата / ЦП)",
+    lblCpu: "Процессор",
+    lblMotherboard: "Мат. плата",
+    lblThresh: "Порог:",
+    cardDrivesTitle: "Физические накопители, износ и наработка",
+    msgPollingDrives: "Опрос контроллеров оборудования...",
+    chartsTempTitle: "Линейные графики температур накопителей (Шкала: 20°C — 80°C)",
+    stateOk: "В НОРМЕ",
+    stateWarn: "ВНИМАНИЕ",
+    stateCrit: "КРИТИЧНО",
+    stateOverheat: "ПЕРЕГРЕВ",
+    wearMemory: "Износ ячеек памяти:",
+    availSpare: "Остаток резерва (Spare):",
+    powerOnHours: "Время наработки:",
+    mediaErrors: "Ошибки целостности:",
+    hoursShort: "ч",
+    daysShort: "дн",
+    chartTempDynamic: "Динамика температуры:",
+    chartThresholdTag: "ПОРОГ",
+    licenseNone: "Бесплатная редакция (ограниченный функционал)",
+    licenseOwner: "Лицензиат:",
+    licenseTill: "до",
+    updatedAt: "Обновлено:"
+  },
+  ENG: {
+    appTitle: "🛡️ StorageGuard PRO Telemetry",
+    modeFree: "Mode: FREE",
+    modePro: "Mode: PRO",
+    modeEnterprise: "Mode: ENTERPRISE",
+    proParamsTitle: "⚙️ PRO Settings: Remote Dashboard & Automated Safety",
+    lblPollInterval: "Drive Polling Interval:",
+    optPoll120: "Every 2 hours (FREE)",
+    optPoll60: "Every 1 hour (PRO)",
+    optPoll30: "Every 30 minutes (PRO)",
+    optPoll15: "Every 15 minutes (PRO)",
+    optPoll5: "Every 5 minutes (PRO - Recommended)",
+    optPoll1: "Every 1 minute (Enterprise)",
+    hintPoll: "Hardware SMART polling frequency",
+    lblRemote: "Remote Web Dashboard Access:",
+    lblAllowRemote: "Enable network access (LAN / VPN)",
+    hintRemote: "Allows system administrator to view telemetry remotely",
+    lblPort: "Remote Web Interface Port:",
+    hintPort: "Default: 48123",
+    lblAuthUser: "Administrator Login (Basic Auth):",
+    hintAuthUser: "Protection against unauthorized network access",
+    lblAuthPass: "Administrator Password:",
+    hintAuthPass: "Local access (127.0.0.1) does not require authentication",
+    lblWhitelist: "Allowed Networks / IP Whitelist:",
+    hintWhitelist: "Leave empty to allow all local network subnets",
+    lblBackupScript: "Emergency Backup Script on drive failure (.bat / .cmd / .ps1):",
+    hintBackupScript: "Triggered silently in background on critical wear, bad sectors, or overheating",
+    btnActivate: "Activate",
+    btnSavePro: "💾 Save PRO Settings",
+    cardSysDriveTitle: "System Volume C:",
+    donutSubFree: "FREE",
+    legendFree: "Free:",
+    legendUsed: "Used:",
+    legendTotal: "Total capacity:",
+    unitGB: "GB",
+    lblSpaceCritThresh: "Crit. Threshold:",
+    cardSysTempsTitle: "System Temperatures (Board / CPU)",
+    lblCpu: "Processor (CPU)",
+    lblMotherboard: "Motherboard",
+    lblThresh: "Threshold:",
+    cardDrivesTitle: "Physical Drives, Wear & Power-On Time",
+    msgPollingDrives: "Querying storage controllers...",
+    chartsTempTitle: "Drive Temperature History Splines (Scale: 20°C — 80°C)",
+    stateOk: "HEALTHY",
+    stateWarn: "WARNING",
+    stateCrit: "CRITICAL",
+    stateOverheat: "OVERHEAT",
+    wearMemory: "Flash Memory Wear:",
+    availSpare: "Available Spare:",
+    powerOnHours: "Power-On Hours:",
+    mediaErrors: "Integrity Errors:",
+    hoursShort: "hrs",
+    daysShort: "days",
+    chartTempDynamic: "Temperature History:",
+    chartThresholdTag: "THRESHOLD",
+    licenseNone: "Free Edition (Limited functionality)",
+    licenseOwner: "Licensed to:",
+    licenseTill: "expires",
+    updatedAt: "Updated:"
+  }
+};
+
+let currentLang = 'RU';
 let driveThresholds = {};
 let currentMode = 'FREE';
+
+function setLanguage(lang) {
+  currentLang = (lang === 'ENG') ? 'ENG' : 'RU';
+  localStorage.setItem('storageguard_lang', currentLang);
+
+  document.getElementById('lang-ru').className = 'lang-btn ' + (currentLang === 'RU' ? 'active' : '');
+  document.getElementById('lang-en').className = 'lang-btn ' + (currentLang === 'ENG' ? 'active' : '');
+
+  // Перевод всех статичных элементов с атрибутом data-i18n
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (i18n[currentLang][key]) {
+      el.innerText = i18n[currentLang][key];
+    }
+  });
+
+  refreshData();
+}
 
 function toggleRemoteControls() {
   const enabled = document.getElementById('cfg-remote-enabled').checked;
@@ -270,7 +422,7 @@ function toggleRemoteControls() {
 
 async function applyKey() {
   const key = document.getElementById('key-input').value.trim();
-  if (!key) return alert("Введите лицензионный ключ");
+  if (!key) return alert(currentLang === 'RU' ? "Введите лицензионный ключ" : "Enter a license key");
   try {
     const res = await fetch('/api/activate', {
       method: 'POST',
@@ -279,12 +431,12 @@ async function applyKey() {
     });
     const result = await res.json();
     if (result.success) {
-      alert("Лицензия PRO успешно активирована!");
+      alert(currentLang === 'RU' ? "Лицензия PRO успешно активирована!" : "PRO license activated successfully!");
       refreshData();
     } else {
-      alert("Ошибка: " + result.error);
+      alert((currentLang === 'RU' ? "Ошибка: " : "Error: ") + result.error);
     }
-  } catch(e) { alert("Ошибка сети: " + e); }
+  } catch(e) { alert("Network error: " + e); }
 }
 
 async function saveProSettings() {
@@ -299,7 +451,8 @@ async function saveProSettings() {
     auth_user: document.getElementById('cfg-auth-user').value.trim(),
     auth_pass: document.getElementById('cfg-auth-pass').value.trim(),
     ip_whitelist: document.getElementById('cfg-ip-whitelist').value.trim(),
-    backup_script: document.getElementById('cfg-backup-script').value.trim()
+    backup_script: document.getElementById('cfg-backup-script').value.trim(),
+    language: currentLang
   };
 
   try {
@@ -309,18 +462,18 @@ async function saveProSettings() {
       body: JSON.stringify(payload)
     });
     if (res.ok) {
-      alert("Настройки сохранены!");
+      alert(currentLang === 'RU' ? "Настройки сохранены!" : "Settings saved!");
       refreshData();
     } else {
-      alert("Ошибка сохранения параметров");
+      alert(currentLang === 'RU' ? "Ошибка сохранения параметров" : "Failed to save settings");
     }
-  } catch(e) { alert("Ошибка: " + e); }
+  } catch(e) { alert("Error: " + e); }
 }
 
 async function saveSpaceThreshold() {
   const val = parseInt(document.getElementById('thresh-input-space-pct').value, 10);
   if (isNaN(val) || val < 5 || val > 50) {
-    return alert("Укажите порог от 5% до 50%");
+    return alert(currentLang === 'RU' ? "Укажите порог от 5% до 50%" : "Specify a threshold from 5% to 50%");
   }
   saveProSettings();
 }
@@ -328,7 +481,7 @@ async function saveSpaceThreshold() {
 async function saveDriveThreshold(index) {
   const val = parseInt(document.getElementById(`thresh-input-${index}`).value, 10);
   if (isNaN(val) || val < 30 || val > 75) {
-    return alert("Укажите порог от 30°C до 75°C");
+    return alert(currentLang === 'RU' ? "Укажите порог от 30°C до 75°C" : "Specify a threshold from 30°C to 75°C");
   }
   driveThresholds[index] = val;
   saveProSettings();
@@ -341,19 +494,21 @@ async function refreshData() {
     const r = data.report || {};
     const h = data.history || [];
     const cfg = data.config || {};
+    const t = i18n[currentLang];
     
     driveThresholds = cfg.thresholds || {};
     currentMode = r.mode || 'FREE';
 
+    // Бейдж редакции
     const badge = document.getElementById('mode-badge');
-    badge.innerText = 'Режим: ' + currentMode;
+    badge.innerText = currentMode === 'PRO' ? t.modePro : (currentMode === 'ENTERPRISE' ? t.modeEnterprise : t.modeFree);
     badge.className = 'badge ' + (currentMode === 'PRO' ? 'badge-pro' : 'badge-free');
 
     const ownerEl = document.getElementById('license-owner');
     if (data.license_client) {
-      ownerEl.innerText = `Лицензиат: ${data.license_client} (до ${data.license_expires_str})`;
+      ownerEl.innerText = `${t.licenseOwner} ${data.license_client} (${t.licenseTill} ${data.license_expires_str})`;
     } else {
-      ownerEl.innerText = 'Бесплатная редакция (ограниченный функционал)';
+      ownerEl.innerText = t.licenseNone;
     }
 
     document.getElementById('cfg-poll-interval').value = (cfg.poll_interval_min || 120).toString();
@@ -370,7 +525,7 @@ async function refreshData() {
     const remoteInd = document.getElementById('remote-indicator');
     if (cfg.remote_access_enabled) {
       remoteInd.style.display = 'inline-block';
-      remoteInd.innerText = `Удалённый доступ: порт ${cfg.remote_port || 48123}`;
+      remoteInd.innerText = `LAN: ${cfg.remote_port || 48123}`;
     } else {
       remoteInd.style.display = 'none';
     }
@@ -381,9 +536,9 @@ async function refreshData() {
     document.getElementById('cfg-backup-script').disabled = isFree;
     toggleRemoteControls();
 
-    document.getElementById('last-update').innerText = 'Обновлено: ' + new Date().toLocaleTimeString();
+    document.getElementById('last-update').innerText = t.updatedAt + ' ' + new Date().toLocaleTimeString();
 
-    // 1. ДИСК C: (Круговая диаграмма относительно полного объёма)
+    // 1. ДИСК C: (Кольцевая диаграмма)
     if (r.system) {
       const free = r.system.free_gb || 0;
       const total = r.system.total_gb || 1;
@@ -395,19 +550,18 @@ async function refreshData() {
       document.getElementById('total-gb').innerText = total.toFixed(1);
       document.getElementById('donut-pct-text').innerText = freePct.toFixed(0) + '%';
 
-      // Отрисовка кольца
       const spaceThresh = cfg.space_threshold_pct || 10;
       let stateColor = 'var(--green)';
-      let stateLabel = 'В НОРМЕ';
+      let stateLabel = t.stateOk;
       let stateClass = 'chip-ok';
 
       if (free < 5.0 || freePct <= spaceThresh) {
         stateColor = 'var(--red)';
-        stateLabel = 'КРИТИЧНО';
+        stateLabel = t.stateCrit;
         stateClass = 'chip-crit';
       } else if (free < 15.0 || freePct <= (spaceThresh + 5)) {
         stateColor = 'var(--orange)';
-        stateLabel = 'ВНИМАНИЕ';
+        stateLabel = t.stateWarn;
         stateClass = 'chip-warn';
       }
 
@@ -449,11 +603,11 @@ async function refreshData() {
 
       const sysBadge = document.getElementById('sys-temp-badge');
       if (isCpuCrit || isMbCrit) {
-        sysBadge.innerText = 'ПЕРЕГРЕВ';
+        sysBadge.innerText = t.stateOverheat;
         sysBadge.className = 'chip chip-crit';
         document.getElementById('card-system-temps').style.borderColor = 'rgba(239, 68, 68, 0.6)';
       } else {
-        sysBadge.innerText = 'В НОРМЕ';
+        sysBadge.innerText = t.stateOk;
         sysBadge.className = 'chip chip-ok';
         document.getElementById('card-system-temps').style.borderColor = 'var(--border)';
       }
@@ -465,17 +619,18 @@ async function refreshData() {
     dContainer.innerHTML = '';
     
     if (drives.length === 0) {
-      dContainer.innerHTML = '<div style="color:var(--orange);">Физические накопители не найдены.</div>';
+      dContainer.innerHTML = `<div style="color:var(--orange);">${t.msgPollingDrives}</div>`;
     } else {
       drives.forEach(d => {
         const userCrit = driveThresholds[d.index] || 50;
         const isCrit = d.temperature_c >= userCrit || d.health_state === 'CRITICAL';
         const isWarn = d.temperature_c >= (userCrit - 5) || d.health_state === 'WARNING';
         const chipClass = isCrit ? 'chip-crit' : (isWarn ? 'chip-warn' : 'chip-ok');
+        const stateText = isCrit ? t.stateCrit : (isWarn ? t.stateWarn : t.stateOk);
 
         const hours = d.power_on_hours || 0;
         const days = Math.floor(hours / 24);
-        const powerOnStr = `${hours.toLocaleString()} ч (~${days} дн)`;
+        const powerOnStr = `${hours.toLocaleString()} ${t.hoursShort} (~${days} ${t.daysShort})`;
 
         dContainer.innerHTML += `
           <div class="drive-item">
@@ -487,26 +642,26 @@ async function refreshData() {
               </div>
               <div class="drive-badges">
                 <div class="threshold-control">
-                  Порог: 
+                  ${t.lblThresh} 
                   <input id="thresh-input-${d.index}" class="threshold-input" type="number" value="${userCrit}" min="30" max="75"> °C
-                  <button class="btn-action" style="padding: 2px 8px;" onclick="saveDriveThreshold(${d.index})">ОК</button>
+                  <button class="btn-action" style="padding: 2px 8px;" onclick="saveDriveThreshold(${d.index})">OK</button>
                 </div>
-                <span class="chip" style="background:rgba(255,255,255,0.06);">Темп: ${d.temperature_c}°C</span>
-                <span class="chip ${chipClass}">${d.health_state}</span>
+                <span class="chip" style="background:rgba(255,255,255,0.06);">${d.temperature_c}°C</span>
+                <span class="chip ${chipClass}">${stateText}</span>
               </div>
             </div>
             <div class="params-grid">
-              <div>Износ ячеек памяти: <strong>${d.wear_percent >= 0 ? d.wear_percent + '%' : '0%'}</strong></div>
-              <div>Остаток резерва (Spare): <strong>${d.available_spare >= 0 ? d.available_spare + '%' : '100%'}</strong></div>
-              <div>Время наработки: <strong>${powerOnStr}</strong></div>
-              <div>Ошибки целостности: <strong>${d.media_errors}</strong></div>
+              <div>${t.wearMemory} <strong>${d.wear_percent >= 0 ? d.wear_percent + '%' : '0%'}</strong></div>
+              <div>${t.availSpare} <strong>${d.available_spare >= 0 ? d.available_spare + '%' : '100%'}</strong></div>
+              <div>${t.powerOnHours} <strong>${powerOnStr}</strong></div>
+              <div>${t.mediaErrors} <strong>${d.media_errors}</strong></div>
             </div>
           </div>
         `;
       });
     }
 
-    // 4. Графики температур накопителей
+    // 4. Графики температур
     const tempContainer = document.getElementById('temp-charts-container');
     if (tempContainer.children.length !== drives.length) {
       tempContainer.innerHTML = '';
@@ -514,7 +669,7 @@ async function refreshData() {
         tempContainer.innerHTML += `
           <div class="chart-card">
             <div class="card-title">
-              <span>Динамика температуры: <strong>PhysicalDrive${d.index} (${d.model})</strong></span>
+              <span>${t.chartTempDynamic} <strong>PhysicalDrive${d.index} (${d.model})</strong></span>
               <span class="chip" id="temp-badge-${d.index}">0°C</span>
             </div>
             <svg id="chart-temp-${d.index}" viewBox="0 0 700 170"></svg>
@@ -533,7 +688,7 @@ async function refreshData() {
       });
 
       if (driveTemps.length < 2) driveTemps = [d.temperature_c, d.temperature_c];
-      renderZonedLineChart(`chart-temp-${d.index}`, driveTemps, labels, userCrit, d.index);
+      renderZonedLineChart(`chart-temp-${d.index}`, driveTemps, labels, userCrit, d.index, t.chartThresholdTag);
       
       const badge = document.getElementById(`temp-badge-${d.index}`);
       if (badge) badge.innerText = d.temperature_c + '°C';
@@ -542,7 +697,7 @@ async function refreshData() {
   } catch(e) { console.error(e); }
 }
 
-function renderZonedLineChart(svgId, values, labels, critThreshold, diskIdx) {
+function renderZonedLineChart(svgId, values, labels, critThreshold, diskIdx, tagLabel) {
   const svg = document.getElementById(svgId);
   if (!svg) return;
   const w = 700, h = 160, padLeft = 45, padRight = 30, topPad = 15, bottomPad = 25;
@@ -577,7 +732,7 @@ function renderZonedLineChart(svgId, values, labels, critThreshold, diskIdx) {
 
   svgContent += `
     <line class="danger-line" x1="${padLeft}" y1="${dangerY}" x2="${w - padRight}" y2="${dangerY}" />
-    <text class="danger-text" x="${w - padRight - 5}" y="${dangerY - 5}" text-anchor="end">ПОРОГ ${critThreshold}°C</text>
+    <text class="danger-text" x="${w - padRight - 5}" y="${dangerY - 5}" text-anchor="end">${tagLabel} ${critThreshold}°C</text>
   `;
 
   if (values && values.length >= 2) {
@@ -590,12 +745,15 @@ function renderZonedLineChart(svgId, values, labels, critThreshold, diskIdx) {
     }
     const areaD = pathD + ` L ${points[points.length-1].x.toFixed(1)} ${(topPad + graphHeight).toFixed(1)} L ${points[0].x.toFixed(1)} ${(topPad + graphHeight).toFixed(1)} Z`;
     svgContent += `<path d="${areaD}" fill="url(#grad-curve-${diskIdx})" /><path d="${pathD}" class="spline-line" />`;
-    svgContent += `<text class="axis-label" x="${padLeft}" y="${h - 4}">${labels[0] || ''}</text><text class="axis-label" x="${w - padRight}" y="${h - 4}" text-anchor="end">${labels[labels.length - 1] || 'Сейчас'}</text>`;
+    svgContent += `<text class="axis-label" x="${padLeft}" y="${h - 4}">${labels[0] || ''}</text><text class="axis-label" x="${w - padRight}" y="${h - 4}" text-anchor="end">${labels[labels.length - 1] || 'Now'}</text>`;
   }
   svg.innerHTML = svgContent;
 }
 
-refreshData();
+// Загрузка сохраненного языка
+const savedLang = localStorage.getItem('storageguard_lang') || 'RU';
+setLanguage(savedLang);
+
 setInterval(refreshData, 30000);
 </script>
 </body>
