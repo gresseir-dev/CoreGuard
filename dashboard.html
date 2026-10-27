@@ -237,7 +237,7 @@
         <div class="metric-sub" style="margin-bottom: 8px;" data-i18n="lblCpu">Процессор</div>
         <div class="threshold-control">
           <span data-i18n="lblThresh">Порог:</span> 
-          <input id="thresh-input-cpu" class="threshold-input" type="number" min="20" max="100" value="70"> °C
+          <input id="thresh-input-cpu" class="threshold-input" type="number" min="20" max="100" value="70"> °C <button class="btn-action" style="padding: 2px 8px; margin-left: 4px;" onclick="saveProSettings()">OK</button>
         </div>
       </div>
       <div>
@@ -245,7 +245,7 @@
         <div class="metric-sub" style="margin-bottom: 8px;" data-i18n="lblMotherboard">Мат. плата</div>
         <div class="threshold-control">
           <span data-i18n="lblThresh">Порог:</span> 
-          <input id="thresh-input-mb" class="threshold-input" type="number" min="20" max="80" value="50"> °C
+          <input id="thresh-input-mb" class="threshold-input" type="number" min="20" max="80" value="50"> °C <button class="btn-action" style="padding: 2px 8px; margin-left: 4px;" onclick="saveProSettings()">OK</button>
         </div>
       </div>
     </div>
@@ -794,3 +794,4 @@ setInterval(refreshData, 30000);
 </script>
 </body>
 </html>
+

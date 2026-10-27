@@ -1,0 +1,397 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>CoreGuard PRO — Презентационный буклет</title>
+<style>
+  @page {
+    size: A4 landscape;
+    margin: 0;
+  }
+  :root {
+    --bg-dark: #070b14;
+    --card-bg: #101726;
+    --card-border: #1e293b;
+    --accent-blue: #38bdf8;
+    --accent-orange: #f59e0b;
+    --accent-green: #10b981;
+    --accent-red: #ef4444;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  body { background: var(--bg-dark); color: var(--text-main); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  .page {
+    width: 297mm;
+    height: 210mm;
+    page-break-after: always;
+    position: relative;
+    padding: 16mm 20mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+    background: radial-gradient(circle at 80% 20%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 10% 90%, rgba(245, 158, 11, 0.05) 0%, transparent 40%),
+                var(--bg-dark);
+  }
+
+  /* Шапка страницы */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 12px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-logo {
+    font-size: 28px;
+    line-height: 1;
+  }
+  .brand-name {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: #fff;
+  }
+  .brand-name span { color: var(--accent-blue); }
+  .brand-tag {
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(56, 189, 248, 0.15);
+    color: var(--accent-blue);
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .contact-mini {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+  }
+
+  /* Сетка карточек */
+  .hero-block {
+    margin: 15px 0 10px 0;
+  }
+  .hero-title {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+  .hero-title span {
+    background: linear-gradient(90deg, #38bdf8, #818cf8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero-desc {
+    font-size: 14px;
+    color: var(--text-muted);
+    max-width: 850px;
+    line-height: 1.5;
+  }
+
+  .grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 12px 0;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 16px;
+    position: relative;
+  }
+  .card-icon {
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+  .card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+  .card-text {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* Блок сравнительных преимуществ */
+  .table-box {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 12px 0;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    text-align: left;
+  }
+  th {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-muted);
+    padding: 10px 14px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--card-border);
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    color: var(--text-main);
+  }
+  tr:last-child td { border-bottom: none; }
+  .badge-yes { color: var(--accent-green); font-weight: 700; }
+  .badge-no { color: var(--accent-red); font-weight: 700; }
+
+  /* Подвал страницы */
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--card-border);
+    padding-top: 10px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .footer-right { font-weight: 600; color: #fff; }
+
+  /* Специфичные акценты второй страницы */
+  .pro-banner {
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    border-radius: 12px;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .pro-banner h3 { font-size: 18px; color: #fff; margin-bottom: 4px; }
+  .pro-banner p { font-size: 12px; color: var(--text-muted); }
+
+  .workflow {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 12px 0;
+  }
+  .step-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 14px;
+    position: relative;
+  }
+  .step-num {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--accent-blue);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .step-title { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .step-desc { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+</style>
+</head>
+<body>
+
+<!-- СТРАНИЦА 1: ПРОДУКТ И ТЕХНОЛОГИЧЕСКИЙ СТЕК -->
+<div class="page">
+  <div class="header">
+    <div class="brand">
+      <div class="brand-logo">🛡️</div>
+      <div>
+        <div class="brand-name">Core<span>Guard</span></div>
+      </div>
+      <div class="brand-tag">PRO Edition</div>
+    </div>
+    <div class="contact-mini">
+      Аппаратная телеметрия и отказоустойчивость инфраструктуры<br>
+      Поддержка: Windows Server 2012–2025 / Windows 10 & 11
+    </div>
+  </div>
+
+  <div class="hero-block">
+    <div class="hero-title">Превентивная защита баз данных <span>1С и SQL</span> от аппаратного краха</div>
+    <div class="hero-desc">
+      CoreGuard — легковесный автономный сервис на базе Go и прямого WinAPI, непрерывно контролирующий физическое состояние накопителей, тепловой режим компонентов и целостность ячеек памяти в обход стандартных ограничений ОС.
+    </div>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-icon">⚡</div>
+      <div class="card-title">Прямой WinAPI SmartProbe</div>
+      <div class="card-text">
+        Опрос контроллеров напрямую через IOCTL (NVMe Log Page 0x02 и ATA Pass-Through). Точные данные без зависимости от зависающего WMI даже для сложных дисков (Intel, Solidigm, Samsung).
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">💾</div>
+      <div class="card-title">Контроль критических томов</div>
+      <div class="card-text">
+        Векторный кольцевой мониторинг дисковой емкости. Исключает аварийную остановку баз транзакций (1С:Предприятие, MS SQL Server, PostgreSQL) из-за внезапного переполнения диска C:.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔥</div>
+      <div class="card-title">Тепловой контур (ЦП / Плата)</div>
+      <div class="card-text">
+        Отслеживание деградации термоинтерфейса и отказа вентиляторов. Настраиваемые пороги срабатывания тревог с визуализацией динамики на сплайн-графиках температур (20°C–80°C).
+      </div>
+    </div>
+  </div>
+
+  <div class="table-box">
+    <table>
+      <thead>
+        <tr>
+          <th>Параметр / Возможность</th>
+          <th>Стандартные утилиты (CrystalDisk/AIDA)</th>
+          <th>Штатный WMI Windows</th>
+          <th>CoreGuard PRO</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Нагрузка на систему и память</strong></td>
+          <td>Тяжелый GUI (>150–300 МБ ОЗУ)</td>
+          <td>Частые подвисания службы WMI</td>
+          <td><span class="badge-yes">&lt; 15 МБ ОЗУ (нативный Go)</span></td>
+        </tr>
+        <tr>
+          <td><strong>Работа в фоне без сессии пользователя</strong></td>
+          <td><span class="badge-no">Требует открытого окна</span></td>
+          <td>Скриптовая рутина</td>
+          <td><span class="badge-yes">Полная автономия в System Tray</span></td>
+        </tr>
+        <tr>
+          <td><strong>Реакция на надвигающийся сбой</strong></td>
+          <td>Только визуальный сигнал</td>
+          <td>Отсутствует</td>
+          <td><span class="badge-yes">Автоматический VSS / Shadow-бэкап</span></td>
+        </tr>
+        <tr>
+          <td><strong>Удаленный мониторинг филиалов</strong></td>
+          <td><span class="badge-no">Нет</span></td>
+          <td>Сложная настройка WinRM</td>
+          <td><span class="badge-yes">Встроенный защищенный Web-Hub</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <div>Линейка решений: <strong>CoreGuard Free / PRO / Enterprise Hub</strong></div>
+    <div class="footer-right">Страница 1 / 2 • Архитектура и Телеметрия</div>
+  </div>
+</div>
+
+<!-- СТРАНИЦА 2: БИЗНЕС-ЛОГИКА, АВТОМАТИЗАЦИЯ И ЛИЦЕНЗИРОВАНИЕ -->
+<div class="page">
+  <div class="header">
+    <div class="brand">
+      <div class="brand-logo">🛡️</div>
+      <div class="brand-name">Core<span>Guard</span></div>
+      <div class="brand-tag">Business Continuity</div>
+    </div>
+    <div class="contact-mini">
+      Разработано для системных интеграторов, IT-аутсорсинга и критических серверов
+    </div>
+  </div>
+
+  <div class="pro-banner">
+    <div>
+      <h3>Автоматическое аварийное реагирование (PRO/Enterprise)</h3>
+      <p>Превращает мониторинг из пассивного регистратора в активную систему защиты данных компании.</p>
+    </div>
+    <div style="font-size: 24px;">🚨 ➔ 🗄️</div>
+  </div>
+
+  <div class="workflow">
+    <div class="step-card">
+      <div class="step-num">Шаг 01 • Анализ</div>
+      <div class="step-title">Фиксация деградации</div>
+      <div class="step-desc">
+        SmartProbe регистрирует рост переназначенных секторов (Reallocated), износ памяти >95% или критический перегрев.
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Шаг 02 • Алертинг</div>
+      <div class="step-title">Мгновенная тревога</div>
+      <div class="step-desc">
+        Всплывающее предупреждение оператору и отправка события системному администратору через локальную сеть.
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Шаг 03 • Спасение</div>
+      <div class="step-title">Фоновый VSS-скрипт</div>
+      <div class="step-desc">
+        Тихий запуск аварийного сценария: сброс теневой копии баз 1C / SQL на внешний сетевой накопитель или NAS.
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Шаг 04 • Доступ</div>
+      <div class="step-title">Удаленный аудит</div>
+      <div class="step-desc">
+        Инженер подключается к дашборду по защищенному каналу (Basic Auth + IP Whitelist) для детальной диагностики.
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-3" style="margin-top: 14px;">
+    <div class="card" style="border-top: 3px solid var(--text-muted);">
+      <div class="card-title">Редакция FREE</div>
+      <div class="card-text">
+        • Локальный дашборд системного трея<br>
+        • Базовый опрос дисков раз в 2 часа<br>
+        • Контроль свободного места диска C:<br>
+        • Двуязычный интерфейс (RU / ENG)<br>
+        • Неограниченно для личного использования
+      </div>
+    </div>
+    <div class="card" style="border-top: 3px solid var(--accent-blue);">
+      <div class="card-title" style="color: var(--accent-blue);">Редакция PRO</div>
+      <div class="card-text">
+        • Высокоточный опрос (от 5 до 15 минут)<br>
+        • <strong>Автозапуск аварийного скрипта спасения</strong><br>
+        • Удаленный доступ по LAN/VPN (Remote Web)<br>
+        • Защита авторизацией и IP-фильтрацией<br>
+        • Криптографическая привязка лицензии Ed25519
+      </div>
+    </div>
+    <div class="card" style="border-top: 3px solid #a855f7;">
+      <div class="card-title" style="color: #a855f7;">ENTERPRISE HUB</div>
+      <div class="card-text">
+        • Высокочастотный аудит (интервал 1 минута)<br>
+        • Централизованный сбор телеметрии с филиалов<br>
+        • Прямая интеграция в SIEM / Zabbix / Telegram<br>
+        • Персональный брендинг для IT-интеграторов<br>
+        • Приоритетная инженерная поддержка
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div><strong>CoreGuard Software</strong> • Безопасность и непрерывность инфраструктуры</div>
+    <div class="footer-right">Страница 2 / 2 • Реагирование и Редакции</div>
+  </div>
+</div>
+
+</body>
+</html>

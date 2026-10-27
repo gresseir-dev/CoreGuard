@@ -3,3 +3,8 @@
 config.json
 history.json
 keygen.go
+
+cmd/
+keygen/
+*.key
+

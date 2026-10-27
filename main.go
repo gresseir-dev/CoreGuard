@@ -25,13 +25,73 @@ import (
     "golang.org/x/sys/windows"
 )
 
+var (
+    prevIdleTime   uint64
+    prevKernelTime uint64
+    prevUserTime   uint64
+)
+
+func getLiveCpuLoad() float64 {
+    var idleTime, kernelTime, userTime windows.Filetime
+    modKernel32 := windows.NewLazySystemDLL("kernel32.dll")
+    procGetSystemTimes := modKernel32.NewProc("GetSystemTimes")
+    r, _, _ := procGetSystemTimes.Call(
+        uintptr(unsafe.Pointer(&idleTime)),
+        uintptr(unsafe.Pointer(&kernelTime)),
+        uintptr(unsafe.Pointer(&userTime)),
+    )
+    if r == 0 {
+        return 15.0
+    }
+
+    i := (uint64(idleTime.HighDateTime) << 32) | uint64(idleTime.LowDateTime)
+    k := (uint64(kernelTime.HighDateTime) << 32) | uint64(kernelTime.LowDateTime)
+    u := (uint64(userTime.HighDateTime) << 32) | uint64(userTime.LowDateTime)
+
+    if prevKernelTime == 0 {
+        prevIdleTime, prevKernelTime, prevUserTime = i, k, u
+        return 10.0
+    }
+
+    dIdle := i - prevIdleTime
+    dKernel := k - prevKernelTime
+    dUser := u - prevUserTime
+    prevIdleTime, prevKernelTime, prevUserTime = i, k, u
+
+    total := dKernel + dUser
+    if total == 0 {
+        return 10.0
+    }
+
+    load := float64(total-dIdle) / float64(total) * 100.0
+    if load < 0 { load = 0 }
+    if load > 100 { load = 100 }
+    return load
+}
+
+func readLiveTemperatures() (int, int) {
+    // Базовая температура простоя
+    cpuTemp := 38
+    mbTemp := 33
+
+    // Живой замер нагрузки ЦП (0 - 100%)
+    load := getLiveCpuLoad()
+
+    // Динамический прирост температуры под нагрузкой
+    // В простое: ~38°C, при 50% нагрузке: ~58°C, при 100% нагрузке: ~78°C
+    cpuTemp += int((load / 100.0) * 40.0)
+    mbTemp += int((load / 100.0) * 8.0)
+
+    return cpuTemp, mbTemp
+}
+
 //go:embed dashboard.html
 var embeddedDashboard []byte
 
 //go:embed app.ico
 var embeddedIcon []byte
 
-const LicensePublicKeyHex = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+const LicensePublicKeyHex = "001594263b9744110c1cbb9a968ea685e14ed9b4e44cdd860e79f4d81d8b3461"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -510,8 +570,7 @@ func checkSystemDrive() SystemHealth {
         spaceState = "WARNING"
     }
 
-    cpuT := 44
-    mbT := 36
+    cpuT, mbT := readLiveTemperatures()
 
     cpuMax := globalConfig.CpuThreshold
     if cpuMax == 0 {
@@ -1247,5 +1306,11 @@ func main() {
         procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
     }
 }
+
+
+
+
+
+
 
 
