@@ -28,10 +28,13 @@ import (
 //go:embed dashboard.html
 var embeddedDashboard []byte
 
+//go:embed app.ico
+var embeddedIcon []byte
+
 const LicensePublicKeyHex = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
 
 const (
-    SingleInstanceMutexName = "Local\\StorageGuard_SingleInstance_Mutex"
+    SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
     LocalDashboardPort      = 48123
 
     IOCTL_STORAGE_QUERY_PROPERTY          = 0x002D1400
@@ -101,24 +104,14 @@ type RECT struct {
     Left, Top, Right, Bottom int32
 }
 
-type ICONINFO struct {
-    FIcon    int32
-    XHotspot uint32
-    YHotspot uint32
-    HbmMask  windows.Handle
-    HbmColor windows.Handle
-}
-
 var (
     modUser32   = windows.NewLazySystemDLL("user32.dll")
     modKernel32 = windows.NewLazySystemDLL("kernel32.dll")
     modShell32  = windows.NewLazySystemDLL("shell32.dll")
-    modGdi32    = windows.NewLazySystemDLL("gdi32.dll")
 
     procCreateMutexW        = modKernel32.NewProc("CreateMutexW")
     procGetLastError        = modKernel32.NewProc("GetLastError")
     procMessageBoxW         = modUser32.NewProc("MessageBoxW")
-
     procDefWindowProcW      = modUser32.NewProc("DefWindowProcW")
     procRegisterClassExW    = modUser32.NewProc("RegisterClassExW")
     procCreateWindowExW     = modUser32.NewProc("CreateWindowExW")
@@ -131,23 +124,9 @@ var (
     procTrackPopupMenu      = modUser32.NewProc("TrackPopupMenu")
     procGetCursorPos        = modUser32.NewProc("GetCursorPos")
     procSetForegroundWindow = modUser32.NewProc("SetForegroundWindow")
-    procGetDC               = modUser32.NewProc("GetDC")
-    procReleaseDC           = modUser32.NewProc("ReleaseDC")
-    procCreateIconIndirect  = modUser32.NewProc("CreateIconIndirect")
-    procFillRect            = modUser32.NewProc("FillRect")
+    procLoadImageW          = modUser32.NewProc("LoadImageW")
 
     procShellNotifyIconW = modShell32.NewProc("Shell_NotifyIconW")
-
-    procCreateCompatibleDC     = modGdi32.NewProc("CreateCompatibleDC")
-    procCreateCompatibleBitmap = modGdi32.NewProc("CreateCompatibleBitmap")
-    procCreateBitmap           = modGdi32.NewProc("CreateBitmap")
-    procSelectObject           = modGdi32.NewProc("SelectObject")
-    procDeleteObject           = modGdi32.NewProc("DeleteObject")
-    procDeleteDC               = modGdi32.NewProc("DeleteDC")
-    procCreateSolidBrush       = modGdi32.NewProc("CreateSolidBrush")
-    procCreatePen              = modGdi32.NewProc("CreatePen")
-    procMoveToEx               = modGdi32.NewProc("MoveToEx")
-    procLineTo                 = modGdi32.NewProc("LineTo")
 )
 
 type LicensePayload struct {
@@ -254,7 +233,7 @@ var (
 
 const historyFileName = "history.json"
 const configFileName = "config.json"
-const lockFileName = "storageguard.lock"
+const lockFileName = "coreguard.lock"
 
 func verifyLicenseKey(keyStr string) (LicensePayload, error) {
     cleanKey := strings.Map(func(r rune) rune {
@@ -302,7 +281,7 @@ func verifyLicenseKey(keyStr string) (LicensePayload, error) {
     }
 
     if !ed25519.Verify(pubKeyBytes, payloadBytes, sigBytes) {
-        return LicensePayload{}, fmt.Errorf("cryptographic signature mismatch")
+        return LicensePayload{}, fmt.Errorf("signature mismatch")
     }
 
     var payload LicensePayload
@@ -374,8 +353,8 @@ func acquireSingleInstanceGuard() bool {
 }
 
 func notifyAlreadyRunning() {
-    title, _ := windows.UTF16PtrFromString("StorageGuard")
-    msg, _ := windows.UTF16PtrFromString("StorageGuard is already running in the system tray!\nRight-click the drive icon to open the dashboard.")
+    title, _ := windows.UTF16PtrFromString("CoreGuard")
+    msg, _ := windows.UTF16PtrFromString("CoreGuard уже запущен в системном трее!\nКликните правой кнопкой мыши по значку для открытия дашборда.")
     const MB_ICONWARNING = 0x00000030
     const MB_OK = 0x00000000
     procMessageBoxW.Call(0, uintptr(unsafe.Pointer(msg)), uintptr(unsafe.Pointer(title)), MB_OK|MB_ICONWARNING)
@@ -462,61 +441,47 @@ func copyToUTF16Fixed(dst []uint16, src string) {
     }
 }
 
-func createDriveIcon() windows.Handle {
-    hdcScreen, _, _ := procGetDC.Call(0)
-    hdcMem, _, _ := procCreateCompatibleDC.Call(hdcScreen)
-    hbmColor, _, _ := procCreateCompatibleBitmap.Call(hdcScreen, 32, 32)
-    procSelectObject.Call(hdcMem, hbmColor)
+// Загрузка настоящей иконки CoreGuard из app.ico
+func getAppIcon() windows.Handle {
+    const IMAGE_ICON = 1
+    const LR_LOADFROMFILE = 0x00000010
+    const LR_DEFAULTSIZE = 0x00000040
 
-    hbmMask, _, _ := procCreateBitmap.Call(32, 32, 1, 1, 0)
-
-    rc := RECT{0, 0, 32, 32}
-    hBrushBg, _, _ := procCreateSolidBrush.Call(0x00000000)
-    procFillRect.Call(hdcMem, uintptr(unsafe.Pointer(&rc)), hBrushBg)
-    procDeleteObject.Call(hBrushBg)
-
-    rcDisk := RECT{3, 4, 29, 28}
-    hBrushBody, _, _ := procCreateSolidBrush.Call(0x003E2D20)
-    procFillRect.Call(hdcMem, uintptr(unsafe.Pointer(&rcDisk)), hBrushBody)
-    procDeleteObject.Call(hBrushBody)
-
-    hPenFrame, _, _ := procCreatePen.Call(0, 1, 0x00A0A0A0)
-    oldPen, _, _ := procSelectObject.Call(hdcMem, hPenFrame)
-    procMoveToEx.Call(hdcMem, 3, 4, 0)
-    procLineTo.Call(hdcMem, 28, 4)
-    procLineTo.Call(hdcMem, 28, 27)
-    procLineTo.Call(hdcMem, 3, 27)
-    procLineTo.Call(hdcMem, 3, 4)
-
-    rcPlate := RECT{6, 7, 25, 20}
-    hBrushPlate, _, _ := procCreateSolidBrush.Call(0x00706050)
-    procFillRect.Call(hdcMem, uintptr(unsafe.Pointer(&rcPlate)), hBrushPlate)
-    procDeleteObject.Call(hBrushPlate)
-
-    rcLed := RECT{7, 23, 11, 25}
-    hBrushLed, _, _ := procCreateSolidBrush.Call(0x0000FF00)
-    procFillRect.Call(hdcMem, uintptr(unsafe.Pointer(&rcLed)), hBrushLed)
-    procDeleteObject.Call(hBrushLed)
-
-    rcPins := RECT{14, 24, 26, 26}
-    hBrushPins, _, _ := procCreateSolidBrush.Call(0x0000D7FF)
-    procFillRect.Call(hdcMem, uintptr(unsafe.Pointer(&rcPins)), hBrushPins)
-    procDeleteObject.Call(hBrushPins)
-
-    procSelectObject.Call(hdcMem, oldPen)
-    procDeleteObject.Call(hPenFrame)
-    procDeleteDC.Call(hdcMem)
-    procReleaseDC.Call(0, hdcScreen)
-
-    ii := ICONINFO{
-        FIcon:    1,
-        HbmMask:  windows.Handle(hbmMask),
-        HbmColor: windows.Handle(hbmColor),
+    // 1. Проверяем локальный файл app.ico на диске
+    if _, err := os.Stat("app.ico"); err == nil {
+        pName, _ := windows.UTF16PtrFromString("app.ico")
+        hIcon, _, _ := procLoadImageW.Call(
+            0,
+            uintptr(unsafe.Pointer(pName)),
+            IMAGE_ICON,
+            32, 32,
+            LR_LOADFROMFILE,
+        )
+        if hIcon != 0 {
+            return windows.Handle(hIcon)
+        }
     }
-    hIcon, _, _ := procCreateIconIndirect.Call(uintptr(unsafe.Pointer(&ii)))
 
-    procDeleteObject.Call(hbmColor)
-    procDeleteObject.Call(hbmMask)
+    // 2. Если файл временно не найден на диске, сохраняем встроенный app.ico и загружаем его
+    if len(embeddedIcon) > 0 {
+        _ = os.WriteFile("app.ico", embeddedIcon, 0644)
+        pName, _ := windows.UTF16PtrFromString("app.ico")
+        hIcon, _, _ := procLoadImageW.Call(
+            0,
+            uintptr(unsafe.Pointer(pName)),
+            IMAGE_ICON,
+            32, 32,
+            LR_LOADFROMFILE,
+        )
+        if hIcon != 0 {
+            return windows.Handle(hIcon)
+        }
+    }
+
+    // 3. Запасной вариант — стандартный защитный щит Windows
+    procLoadIconW := modUser32.NewProc("LoadIconW")
+    const IDI_SHIELD = 32518
+    hIcon, _, _ := procLoadIconW.Call(0, uintptr(IDI_SHIELD))
     return windows.Handle(hIcon)
 }
 
@@ -892,19 +857,19 @@ func runCheckCycle() {
     saveHistory()
 
     isRu := globalConfig.Language != "ENG"
-    tipText := fmt.Sprintf("StorageGuard (%s)\n%d min | Drives: %d\nC: %.1f GB (%.0f%%) free",
+    tipText := fmt.Sprintf("CoreGuard (%s)\n%d min | Drives: %d\nC: %.1f GB (%.0f%%) free",
         globalConfig.Mode, globalConfig.PollIntervalMin, len(report.Drives), report.System.FreeGB, report.System.FreePercent)
     if isRu {
-        tipText = fmt.Sprintf("StorageGuard (%s)\n%d мин | Дисков: %d\nC: %.1f GB (%.0f%%) свободно",
+        tipText = fmt.Sprintf("CoreGuard (%s)\n%d мин | Дисков: %d\nC: %.1f GB (%.0f%%) свободно",
             globalConfig.Mode, globalConfig.PollIntervalMin, len(report.Drives), report.System.FreeGB, report.System.FreePercent)
     }
 
     if hasCritical {
         if isRu {
-            tipText = fmt.Sprintf("StorageGuard (%s)\nВНИМАНИЕ: СБОЙ/ПЕРЕГРЕВ!\nДисков: %d | C: %.1f GB",
+            tipText = fmt.Sprintf("CoreGuard (%s)\nВНИМАНИЕ: СБОЙ/ПЕРЕГРЕВ!\nДисков: %d | C: %.1f GB",
                 globalConfig.Mode, len(report.Drives), report.System.FreeGB)
         } else {
-            tipText = fmt.Sprintf("StorageGuard (%s)\nALERT: OVERHEAT/DEGRADATION!\nDrives: %d | C: %.1f GB",
+            tipText = fmt.Sprintf("CoreGuard (%s)\nALERT: OVERHEAT/DEGRADATION!\nDrives: %d | C: %.1f GB",
                 globalConfig.Mode, len(report.Drives), report.System.FreeGB)
         }
     }
@@ -997,7 +962,7 @@ func remoteAuthMiddleware(next http.Handler) http.Handler {
             user, pass, ok := r.BasicAuth()
             if !ok || subtle.ConstantTimeCompare([]byte(user), []byte(authUser)) != 1 ||
                 subtle.ConstantTimeCompare([]byte(pass), []byte(authPass)) != 1 {
-                w.Header().Set("WWW-Authenticate", `Basic realm="StorageGuard PRO Telemetry"`)
+                w.Header().Set("WWW-Authenticate", `Basic realm="CoreGuard PRO Telemetry"`)
                 http.Error(w, "Unauthorized: Please log in", http.StatusUnauthorized)
                 return
             }
@@ -1195,13 +1160,13 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
             stateMu.RLock()
             isRu := globalConfig.Language != "ENG"
             statusText := fmt.Sprintf("Статус: [%s] Накопителей: %d | C: %.1f ГБ (%s)", globalConfig.Mode, len(globalReport.Drives), globalReport.System.FreeGB, globalReport.System.HealthState)
-            chartsText := "Открыть дашборд накопителей"
-            checkText := "Проверить накопители сейчас"
+            chartsText := "Открыть дашборд CoreGuard"
+            checkText := "Проверить состояние сейчас"
             exitText := "Выход"
             if !isRu {
                 statusText = fmt.Sprintf("Status: [%s] Drives: %d | C: %.1f GB (%s)", globalConfig.Mode, len(globalReport.Drives), globalReport.System.FreeGB, globalReport.System.HealthState)
-                chartsText = "Open Storage Dashboard"
-                checkText = "Check Drives Now"
+                chartsText = "Open CoreGuard Dashboard"
+                checkText = "Check System Now"
                 exitText = "Exit"
             }
             stateMu.RUnlock()
@@ -1272,7 +1237,7 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
         case ID_TEST_PENDING:
             showTrayNotification("Warning! Bad Sectors Detected!", "Drive reported unstable/pending sectors.", true)
         case ID_TEST_PRO_BACKUP:
-            showTrayNotification("StorageGuard PRO: Backup Activated", "[PRO] Drive failure risk identified. Emergency backup script triggered.", false)
+            showTrayNotification("CoreGuard PRO: Backup Activated", "[PRO] Drive failure risk identified. Emergency backup script triggered.", false)
         }
         return 0
 
@@ -1303,7 +1268,7 @@ func main() {
     startLocalWebServer()
     syncRemoteServer()
 
-    className := utf16FromString("StorageGuardTrayClass")
+    className := utf16FromString("CoreGuardTrayClass")
     type WNDCLASSEXW struct {
         CbSize        uint32
         Style         uint32
@@ -1319,10 +1284,14 @@ func main() {
         HIconSm       windows.Handle
     }
 
+    hIcon := getAppIcon()
+
     wndClass := WNDCLASSEXW{
         CbSize:        uint32(unsafe.Sizeof(WNDCLASSEXW{})),
         LpfnWndProc:   windows.NewCallback(trayWindowProc),
         LpszClassName: &className[0],
+        HIcon:         hIcon,
+        HIconSm:       hIcon,
     }
     procRegisterClassExW.Call(uintptr(unsafe.Pointer(&wndClass)))
 
@@ -1334,8 +1303,6 @@ func main() {
     )
     globalHWnd = windows.Handle(hwnd)
 
-    hIcon := createDriveIcon()
-
     nid = NOTIFYICONDATAW{
         CbSize:           uint32(unsafe.Sizeof(nid)),
         HWnd:             globalHWnd,
@@ -1344,7 +1311,7 @@ func main() {
         UCallbackMessage: WM_TRAY_NOTIFY,
         HIcon:            hIcon,
     }
-    copyToUTF16Fixed(nid.SzTip[:], "StorageGuard PRO: Starting engine...")
+    copyToUTF16Fixed(nid.SzTip[:], "CoreGuard PRO: Starting engine...")
     procShellNotifyIconW.Call(NIM_ADD, uintptr(unsafe.Pointer(&nid)))
 
     go runCheckCycle()
