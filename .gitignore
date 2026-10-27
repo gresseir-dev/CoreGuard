@@ -8,3 +8,22 @@ cmd/
 keygen/
 *.key
 
+
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# CoreGuard local configs & licenses (не пушим боевые ключи и пароли)
+config.json
+nodes.json
+license.key
+private.key
+ed25519_private.pem
+
+# OS / Editor artifacts
+.vscode/
+.idea/
+*.log

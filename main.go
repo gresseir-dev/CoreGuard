@@ -993,8 +993,8 @@ func buildAppRouter() *http.ServeMux {
             var body Config
             if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
                 stateMu.Lock()
-                if globalConfig.Mode == "PRO" {
-                    if body.PollIntervalMin >= 5 && body.PollIntervalMin <= 120 {
+                if globalConfig.Mode == "PRO" || globalConfig.Mode == "ENTERPRISE" {
+                    if body.PollIntervalMin >= 1 && body.PollIntervalMin <= 1440 {
                         globalConfig.PollIntervalMin = body.PollIntervalMin
                     }
                     globalConfig.RemoteAccessEnabled = body.RemoteAccessEnabled
@@ -1054,7 +1054,7 @@ func syncRemoteServer() {
     defer remoteMu.Unlock()
 
     stateMu.RLock()
-    enabled := globalConfig.RemoteAccessEnabled && globalConfig.Mode == "PRO"
+    enabled := globalConfig.RemoteAccessEnabled && (globalConfig.Mode == "PRO" || globalConfig.Mode == "ENTERPRISE")
     port := globalConfig.RemotePort
     stateMu.RUnlock()
 
@@ -1306,6 +1306,9 @@ func main() {
         procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
     }
 }
+
+
+
 
 
 

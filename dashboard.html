@@ -512,13 +512,22 @@ async function refreshData() {
       ownerEl.innerText = t.licenseNone;
     }
 
-    document.getElementById('cfg-poll-interval').value = (cfg.poll_interval_min || 120).toString();
-    document.getElementById('cfg-remote-enabled').checked = !!cfg.remote_access_enabled;
-    document.getElementById('cfg-remote-port').value = cfg.remote_port || 48123;
-    document.getElementById('cfg-auth-user').value = cfg.auth_user || '';
-    document.getElementById('cfg-auth-pass').value = cfg.auth_pass || '';
-    document.getElementById('cfg-ip-whitelist').value = cfg.ip_whitelist || '';
-    document.getElementById('cfg-backup-script').value = cfg.backup_script || '';
+    const settingsModal = document.getElementById('settings-modal');
+    const isModalOpen = settingsModal && (settingsModal.style.display === 'flex' || settingsModal.style.display === 'block');
+    const activeEl = document.activeElement;
+
+    // Синхронизируем инпуты модалки ТОЛЬКО если пользователь прямо сейчас их не редактирует
+    if (!isModalOpen) {
+      if (activeEl !== document.getElementById('cfg-poll-interval')) {
+        document.getElementById('cfg-poll-interval').value = (cfg.poll_interval_min || 120).toString();
+      }
+      document.getElementById('cfg-remote-enabled').checked = !!cfg.remote_access_enabled;
+      document.getElementById('cfg-remote-port').value = cfg.remote_port || 48123;
+      document.getElementById('cfg-auth-user').value = cfg.auth_user || '';
+      document.getElementById('cfg-auth-pass').value = cfg.auth_pass || '';
+      document.getElementById('cfg-ip-whitelist').value = cfg.ip_whitelist || '';
+      document.getElementById('cfg-backup-script').value = cfg.backup_script || '';
+    }
     document.getElementById('thresh-input-cpu').value = cfg.cpu_threshold || 70;
     document.getElementById('thresh-input-mb').value = cfg.mb_threshold || 50;
     document.getElementById('thresh-input-space-pct').value = cfg.space_threshold_pct || 10;
@@ -794,4 +803,5 @@ setInterval(refreshData, 30000);
 </script>
 </body>
 </html>
+
 
