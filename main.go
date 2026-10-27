@@ -37,13 +37,6 @@ const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
     LocalDashboardPort      = 48123
 
-    IOCTL_STORAGE_QUERY_PROPERTY          = 0x002D1400
-    PropertyStandardQuery                 = 0
-    StorageDeviceProtocolSpecificProperty = 49
-    ProtocolTypeNvme                      = 1
-    NVMeDataTypeLogPage                   = 1
-    NVME_LOG_PAGE_HEALTH_INFO             = 0x02
-
     NIM_ADD          = 0x00000000
     NIM_MODIFY       = 0x00000001
     NIM_DELETE       = 0x00000002
@@ -441,13 +434,10 @@ func copyToUTF16Fixed(dst []uint16, src string) {
     }
 }
 
-// Загрузка настоящей иконки CoreGuard из app.ico
 func getAppIcon() windows.Handle {
     const IMAGE_ICON = 1
     const LR_LOADFROMFILE = 0x00000010
-    const LR_DEFAULTSIZE = 0x00000040
 
-    // 1. Проверяем локальный файл app.ico на диске
     if _, err := os.Stat("app.ico"); err == nil {
         pName, _ := windows.UTF16PtrFromString("app.ico")
         hIcon, _, _ := procLoadImageW.Call(
@@ -462,7 +452,6 @@ func getAppIcon() windows.Handle {
         }
     }
 
-    // 2. Если файл временно не найден на диске, сохраняем встроенный app.ico и загружаем его
     if len(embeddedIcon) > 0 {
         _ = os.WriteFile("app.ico", embeddedIcon, 0644)
         pName, _ := windows.UTF16PtrFromString("app.ico")
@@ -478,7 +467,6 @@ func getAppIcon() windows.Handle {
         }
     }
 
-    // 3. Запасной вариант — стандартный защитный щит Windows
     procLoadIconW := modUser32.NewProc("LoadIconW")
     const IDI_SHIELD = 32518
     hIcon, _, _ := procLoadIconW.Call(0, uintptr(IDI_SHIELD))
@@ -565,130 +553,26 @@ func checkSystemDrive() SystemHealth {
     }
 }
 
-func queryDirectNvmeLog(driveIndex int) (hours uint64, temp int, wear int, spare int) {
-    path, err := windows.UTF16PtrFromString(fmt.Sprintf(`\\.\PhysicalDrive%d`, driveIndex))
-    if err != nil {
-        return 0, 0, -1, -1
-    }
-
-    handle, err := windows.CreateFile(
-        path,
-        windows.GENERIC_READ|windows.GENERIC_WRITE,
-        windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
-        nil,
-        windows.OPEN_EXISTING,
-        0,
-        0,
-    )
-    if err != nil {
-        handle, err = windows.CreateFile(
-            path,
-            0,
-            windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
-            nil,
-            windows.OPEN_EXISTING,
-            0,
-            0,
-        )
-        if err != nil {
-            return 0, 0, -1, -1
-        }
-    }
-    defer windows.CloseHandle(handle)
-
-    buf := make([]byte, 4096)
-    *(*uint32)(unsafe.Pointer(&buf[0])) = StorageDeviceProtocolSpecificProperty
-    *(*uint32)(unsafe.Pointer(&buf[4])) = PropertyStandardQuery
-
-    *(*uint32)(unsafe.Pointer(&buf[12])) = ProtocolTypeNvme
-    *(*uint32)(unsafe.Pointer(&buf[16])) = NVMeDataTypeLogPage
-    *(*uint32)(unsafe.Pointer(&buf[20])) = NVME_LOG_PAGE_HEALTH_INFO
-    *(*uint32)(unsafe.Pointer(&buf[24])) = 0
-    *(*uint32)(unsafe.Pointer(&buf[28])) = 48
-    *(*uint32)(unsafe.Pointer(&buf[32])) = 512
-
-    var bytesReturned uint32
-    errIo := windows.DeviceIoControl(
-        handle,
-        IOCTL_STORAGE_QUERY_PROPERTY,
-        &buf[0],
-        uint32(len(buf)),
-        &buf[0],
-        uint32(len(buf)),
-        &bytesReturned,
-        nil,
-    )
-
-    if errIo == nil && bytesReturned >= 200 {
-        dataOffset := int(*(*uint32)(unsafe.Pointer(&buf[24])))
-        if dataOffset <= 0 || dataOffset+200 > int(bytesReturned) {
-            dataOffset = 56
-            if dataOffset+150 > int(bytesReturned) {
-                dataOffset = 48
-            }
-        }
-
-        if dataOffset+140 <= int(bytesReturned) {
-            data := buf[dataOffset:]
-            kelvin := uint16(data[1]) | (uint16(data[2]) << 8)
-            if kelvin > 273 && kelvin < 400 {
-                temp = int(kelvin) - 273
-            }
-
-            spare = int(data[3])
-            wear = int(data[5])
-
-            poh := uint64(data[128]) |
-                (uint64(data[129]) << 8) |
-                (uint64(data[130]) << 16) |
-                (uint64(data[131]) << 24) |
-                (uint64(data[132]) << 32) |
-                (uint64(data[133]) << 40) |
-                (uint64(data[134]) << 48) |
-                (uint64(data[135]) << 56)
-
-            if poh > 0 {
-                hours = poh
-            }
-            return hours, temp, wear, spare
-        }
-    }
-    return 0, 0, -1, -1
-}
-
+// Опрос накопителей через интеграцию с модулем smartprobe
 func queryAllDisksReliability() []DriveInfo {
     psScript := `
 $ErrorActionPreference = 'SilentlyContinue'
-$disks = Get-PhysicalDisk | Sort-Object DeviceId
-$res = @()
-foreach ($d in $disks) {
-    $c = Get-StorageReliabilityCounter -PhysicalDisk $d
+Get-PhysicalDisk | ForEach-Object {
+    $c = $_ | Get-StorageReliabilityCounter
+    $poh = 0
+    if ($c -and $c.PowerOnHours) { $poh = [uint64]$c.PowerOnHours }
     $temp = 0
-    if ($c.Temperature -and $c.Temperature -gt 0 -and $c.Temperature -lt 120) {
-        $temp = [int]$c.Temperature
+    if ($c -and $c.Temperature) { $temp = [int]$c.Temperature }
+    [PSCustomObject]@{
+        DeviceId     = [int]$_.DeviceId
+        FriendlyName = [string]$_.FriendlyName
+        BusType      = [string]$_.BusType
+        MediaType    = [string]$_.MediaType
+        PowerOnHours = $poh
+        Temperature  = $temp
     }
-    $hours = 0
-    if ($c.PowerOnHours) {
-        $hours = [uint64]$c.PowerOnHours
-    }
-    $wear = -1
-    if ($null -ne $c.Wear) {
-        $wear = [int]$c.Wear
-    }
-    $res += [PSCustomObject]@{
-        DeviceId = [int]$d.DeviceId
-        Model = [string]$d.FriendlyName
-        BusType = [string]$d.BusType
-        MediaType = [string]$d.MediaType
-        Temperature = $temp
-        PowerOnHours = $hours
-        Wear = $wear
-        ReadErrors = [uint64]$c.ReadErrorsTotal
-    }
-}
-$res | ConvertTo-Json -Compress
+} | ConvertTo-Json -Compress
 `
-
     cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", psScript)
     cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
     out, err := cmd.Output()
@@ -701,20 +585,18 @@ $res | ConvertTo-Json -Compress
         return nil
     }
 
-    type PsDisk struct {
+    type PsBasicDisk struct {
         DeviceId     int    `json:"DeviceId"`
-        Model        string `json:"Model"`
+        FriendlyName string `json:"FriendlyName"`
         BusType      string `json:"BusType"`
         MediaType    string `json:"MediaType"`
-        Temperature  int    `json:"Temperature"`
         PowerOnHours uint64 `json:"PowerOnHours"`
-        Wear         int    `json:"Wear"`
-        ReadErrors   uint64 `json:"ReadErrors"`
+        Temperature  int    `json:"Temperature"`
     }
 
-    var psList []PsDisk
+    var psList []PsBasicDisk
     if trimmed[0] == '{' {
-        var single PsDisk
+        var single PsBasicDisk
         if err := json.Unmarshal(trimmed, &single); err == nil {
             psList = append(psList, single)
         }
@@ -730,31 +612,35 @@ $res | ConvertTo-Json -Compress
         }
 
         temp := pd.Temperature
-        wear := pd.Wear
+        if temp <= 0 { temp = 35 }
+        wear := 0
         availSpare := 100
         hours := pd.PowerOnHours
+        mediaErrors := uint64(0)
+        pendingSec := uint64(0)
+        reallocSec := uint64(0)
 
-        if hours == 0 || strings.Contains(strings.ToUpper(bus), "NVME") || strings.Contains(strings.ToUpper(pd.Model), "INTEL") {
-            nvmeHours, nvmeTemp, nvmeWear, nvmeSpare := queryDirectNvmeLog(pd.DeviceId)
-            if nvmeHours > 0 {
-                hours = nvmeHours
+        // Прямой опрос через smartprobe
+        probeData, err := ProbePhysicalStorage(pd.DeviceId, pd.FriendlyName)
+        if err == nil && probeData != nil {
+            if probeData.TemperatureC > 0 {
+                temp = probeData.TemperatureC
             }
-            if temp <= 0 && nvmeTemp > 0 {
-                temp = nvmeTemp
+            if probeData.PowerOnHours > 0 {
+                hours = probeData.PowerOnHours
             }
-            if wear < 0 && nvmeWear >= 0 {
-                wear = nvmeWear
+            if probeData.WearPercent >= 0 {
+                wear = probeData.WearPercent
             }
-            if nvmeSpare >= 0 {
-                availSpare = nvmeSpare
+            if probeData.AvailableSpare >= 0 {
+                availSpare = probeData.AvailableSpare
             }
-        }
-
-        if temp <= 0 {
-            temp = 35
-        }
-        if wear >= 0 && wear <= 100 && availSpare == 100 {
-            availSpare = 100 - wear
+            mediaErrors = probeData.MediaErrors
+            pendingSec = probeData.PendingSectors
+            reallocSec = probeData.ReallocatedSectors
+            if probeData.IsNVMe {
+                bus = "NVMe"
+            }
         }
 
         userCrit := 50
@@ -764,6 +650,7 @@ $res | ConvertTo-Json -Compress
 
         hState := "OK"
         var alerts []string
+
         if temp >= userCrit {
             hState = "CRITICAL"
             alerts = append(alerts, fmt.Sprintf("High temperature (%d°C >= %d°C)", temp, userCrit))
@@ -772,19 +659,29 @@ $res | ConvertTo-Json -Compress
             hState = "WARNING"
             alerts = append(alerts, fmt.Sprintf("SSD Wear > 95%%: %d%%", wear))
         }
+        if availSpare > 0 && availSpare <= 10 {
+            hState = "CRITICAL"
+            alerts = append(alerts, fmt.Sprintf("Spare blocks critical: %d%%", availSpare))
+        }
+        if pendingSec > 0 {
+            hState = "CRITICAL"
+            alerts = append(alerts, fmt.Sprintf("Pending bad sectors: %d", pendingSec))
+        }
 
         results = append(results, DriveInfo{
-            Index:          pd.DeviceId,
-            Model:          strings.TrimSpace(pd.Model),
-            Interface:      bus,
-            Temperature:    temp,
-            HealthState:    hState,
-            WearPercent:    wear,
-            AvailableSpare: availSpare,
-            PowerOnHours:   hours,
-            MediaErrors:    pd.ReadErrors,
-            CriticalFlags:  "0x00",
-            Alerts:         alerts,
+            Index:              pd.DeviceId,
+            Model:              strings.TrimSpace(pd.FriendlyName),
+            Interface:          bus,
+            Temperature:        temp,
+            HealthState:        hState,
+            WearPercent:        wear,
+            AvailableSpare:     availSpare,
+            PowerOnHours:       hours,
+            MediaErrors:        mediaErrors,
+            PendingSectors:     pendingSec,
+            ReallocatedSectors: reallocSec,
+            CriticalFlags:      "0x00",
+            Alerts:             alerts,
         })
     }
 
@@ -1350,3 +1247,5 @@ func main() {
         procDispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
     }
 }
+
+
