@@ -26,13 +26,24 @@
   .badge-pro { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border-color: rgba(59, 130, 246, 0.4); }
   
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-bottom: 24px; }
-  .card { background: var(--card-bg); backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
+  .card { background: var(--card-bg); backdrop-filter: blur(12px); border: 1px solid var(--border); border-radius: 16px; padding: 20px; transition: border-color 0.3s; }
   .card-title { font-size: 13px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
   .metric-value { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
   .metric-sub { font-size: 13px; color: var(--text-muted); }
   
+  /* Кольцевая диаграмма диска C: */
+  .donut-container { display: flex; align-items: center; gap: 24px; margin-top: 10px; flex-wrap: wrap; }
+  .donut-svg-wrap { position: relative; width: 140px; height: 140px; flex-shrink: 0; }
+  .donut-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .donut-center-text { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .donut-pct { font-size: 22px; font-weight: 700; }
+  .donut-sub { font-size: 10px; color: var(--text-muted); text-transform: uppercase; }
+  
+  .donut-legend { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 160px; }
+  .donut-legend-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+
   .progress-bar-wrap { background: rgba(255, 255, 255, 0.08); height: 10px; border-radius: 6px; overflow: hidden; margin-top: 14px; position: relative; }
-  .progress-bar-inner { height: 100%; border-radius: 6px; transition: width 0.5s ease; background: var(--green); width: 0%; }
   
   .charts-grid { display: flex; flex-direction: column; gap: 18px; margin-bottom: 24px; }
   .chart-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
@@ -42,9 +53,7 @@
   .grid-line { stroke: rgba(255, 255, 255, 0.08); stroke-dasharray: 4; stroke-width: 1; }
   .danger-line { stroke: #ef4444; stroke-width: 1.5; stroke-dasharray: 5; }
   .danger-text { fill: #f87171; font-size: 11px; font-weight: 600; }
-  
   .spline-line { fill: none; stroke: var(--blue); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-  .spline-space-line { fill: none; stroke: var(--green); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
   
   .drive-list { display: flex; flex-direction: column; gap: 14px; }
   .drive-item { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
@@ -65,7 +74,6 @@
   .btn-secondary { background: rgba(255,255,255,0.1); color: var(--text); }
   .btn-secondary:hover { background: rgba(255,255,255,0.15); }
 
-  /* Формы настроек PRO */
   .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 10px; }
   .form-group { display: flex; flex-direction: column; gap: 6px; }
   .form-group label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
@@ -73,10 +81,6 @@
   .form-control:disabled { opacity: 0.5; cursor: not-allowed; }
   .switch-row { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }
   .hint-text { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-
-  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); align-items: center; margin-top: 8px; }
-  .legend-item { display: flex; align-items: center; gap: 6px; }
-  .legend-box { width: 12px; height: 12px; border-radius: 3px; }
 </style>
 </head>
 <body>
@@ -90,7 +94,7 @@
   </div>
 </div>
 
-<!-- БЛОК НАСТРОЕК PRO (Удаленный доступ, сеть, бэкапы) -->
+<!-- БЛОК НАСТРОЕК PRO -->
 <div class="card" style="margin-bottom: 24px; border-color: rgba(59, 130, 246, 0.4);">
   <div class="card-title">
     <span>⚙️ Параметры PRO: Удалённый дашборд и Автоматизация безопасности</span>
@@ -123,7 +127,7 @@
     <div class="form-group">
       <label>Порт удалённого веб-интерфейса:</label>
       <input type="number" id="cfg-remote-port" class="form-control" value="48123" min="1024" max="65535">
-      <span class="hint-text">По умолчанию: 48123 (Требуется разрешение в Брандмауэре)</span>
+      <span class="hint-text">По умолчанию: 48123</span>
     </div>
 
     <div class="form-group">
@@ -161,18 +165,60 @@
 </div>
 
 <div class="grid">
-  <div class="card">
-    <div class="card-title">Системный том C: <span id="space-state" class="chip chip-ok">В НОРМЕ</span></div>
-    <div class="metric-value"><span id="free-gb">0.0</span> <span style="font-size: 16px; font-weight: 400; color: var(--text-muted);">ГБ свободно</span></div>
-    <div class="metric-sub">Занято <span id="used-gb">0.0</span> ГБ из <span id="total-gb">0.0</span> ГБ (<span id="free-pct">0</span>% свободно)</div>
-    <div class="progress-bar-wrap">
-      <div id="space-progress" class="progress-bar-inner"></div>
+  <!-- КАРТОЧКА ДИСКА C: КРУГОВАЯ ДИАГРАММА И ПОРОГ В % -->
+  <div class="card" id="card-disk-c">
+    <div class="card-title">
+      <span>Системный том C:</span>
+      <span id="space-state" class="chip chip-ok">В НОРМЕ</span>
+    </div>
+
+    <div class="donut-container">
+      <div class="donut-svg-wrap">
+        <svg class="donut-svg" viewBox="0 0 42 42">
+          <!-- Фоновый круг (занятое место) -->
+          <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="rgba(255,255,255,0.08)" stroke-width="4"></circle>
+          <!-- Дуга свободного места -->
+          <circle id="donut-free-arc" cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="var(--green)" stroke-width="4" stroke-dasharray="0 100" stroke-linecap="round" style="transition: stroke-dasharray 0.6s ease, stroke 0.3s;"></circle>
+        </svg>
+        <div class="donut-center-text">
+          <span id="donut-pct-text" class="donut-pct">0%</span>
+          <span class="donut-sub">СВОБОДНО</span>
+        </div>
+      </div>
+
+      <div class="donut-legend">
+        <div class="donut-legend-row">
+          <span><span class="legend-dot" id="legend-dot-free" style="background: var(--green);"></span>Свободно:</span>
+          <strong><span id="free-gb">0.0</span> ГБ</strong>
+        </div>
+        <div class="donut-legend-row">
+          <span><span class="legend-dot" style="background: rgba(255,255,255,0.2);"></span>Занято:</span>
+          <strong><span id="used-gb">0.0</span> ГБ</strong>
+        </div>
+        <div class="donut-legend-row" style="border-top: 1px solid var(--border); padding-top: 6px;">
+          <span style="color: var(--text-muted);">Общий объём:</span>
+          <strong><span id="total-gb">0.0</span> ГБ</strong>
+        </div>
+
+        <!-- БЛОК НАСТРОЙКИ КРИТИЧЕСКОГО ПОРОГА В % -->
+        <div class="threshold-control" style="margin-top: 6px; justify-content: space-between;">
+          <span>Критич. порог:</span>
+          <div style="display:flex; align-items:center; gap:4px;">
+            <input id="thresh-input-space-pct" class="threshold-input" type="number" min="5" max="50" value="10"> %
+            <button class="btn-action" style="padding: 2px 8px;" onclick="saveSpaceThreshold()">ОК</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-title">Температуры системы (Плата / ЦП)</div>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+  <!-- КАРТОЧКА ЦП И ПЛАТЫ -->
+  <div class="card" id="card-system-temps">
+    <div class="card-title">
+      <span>Температуры системы (Плата / ЦП)</span>
+      <span id="sys-temp-badge" class="chip chip-ok">В НОРМЕ</span>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 10px;">
       <div>
         <div class="metric-value" id="cpu-temp-val">0°C</div>
         <div class="metric-sub" style="margin-bottom: 8px;">Процессор</div>
@@ -190,9 +236,9 @@
         </div>
       </div>
     </div>
-    <div class="progress-bar-wrap" style="display: flex; gap: 6px; background: transparent; height: 6px; margin-top: 14px;">
-      <div id="cpu-bar" style="height: 100%; border-radius: 3px; width: 50%; background: var(--green);"></div>
-      <div id="mb-bar" style="height: 100%; border-radius: 3px; width: 50%; background: var(--green);"></div>
+    <div class="progress-bar-wrap" style="display: flex; gap: 6px; background: transparent; height: 6px; margin-top: 20px;">
+      <div id="cpu-bar" style="height: 100%; border-radius: 3px; width: 50%; background: var(--green); transition: background 0.3s;"></div>
+      <div id="mb-bar" style="height: 100%; border-radius: 3px; width: 50%; background: var(--green); transition: background 0.3s;"></div>
     </div>
   </div>
 </div>
@@ -206,18 +252,9 @@
 
 <div class="card-title" style="margin-bottom: 12px;">
   <span>Линейные графики температур накопителей (Шкала: 20°C — 80°C)</span>
-  <div class="legend">
-    <div class="legend-item"><div class="legend-box" style="background: rgba(16, 185, 129, 0.25); border: 1px solid var(--green);"></div> Безопасная зона</div>
-    <div class="legend-item"><div class="legend-box" style="background: rgba(239, 68, 68, 0.2); border: 1px solid var(--red);"></div> Критическая зона (порог)</div>
-  </div>
 </div>
 
 <div id="temp-charts-container" class="charts-grid"></div>
-
-<div class="chart-card" style="margin-bottom: 24px;">
-  <div class="card-title">Динамика свободного объема системного тома C: (ГБ)</div>
-  <svg id="chart-space" viewBox="0 0 700 160"></svg>
-</div>
 
 <script>
 let driveThresholds = {};
@@ -255,6 +292,7 @@ async function saveProSettings() {
     thresholds: driveThresholds,
     cpu_threshold: parseInt(document.getElementById('thresh-input-cpu').value, 10),
     mb_threshold: parseInt(document.getElementById('thresh-input-mb').value, 10),
+    space_threshold_pct: parseInt(document.getElementById('thresh-input-space-pct').value, 10),
     poll_interval_min: parseInt(document.getElementById('cfg-poll-interval').value, 10),
     remote_access_enabled: document.getElementById('cfg-remote-enabled').checked,
     remote_port: parseInt(document.getElementById('cfg-remote-port').value, 10),
@@ -271,12 +309,20 @@ async function saveProSettings() {
       body: JSON.stringify(payload)
     });
     if (res.ok) {
-      alert("Настройки PRO сохранены и применены!");
+      alert("Настройки сохранены!");
       refreshData();
     } else {
       alert("Ошибка сохранения параметров");
     }
   } catch(e) { alert("Ошибка: " + e); }
+}
+
+async function saveSpaceThreshold() {
+  const val = parseInt(document.getElementById('thresh-input-space-pct').value, 10);
+  if (isNaN(val) || val < 5 || val > 50) {
+    return alert("Укажите порог от 5% до 50%");
+  }
+  saveProSettings();
 }
 
 async function saveDriveThreshold(index) {
@@ -299,7 +345,6 @@ async function refreshData() {
     driveThresholds = cfg.thresholds || {};
     currentMode = r.mode || 'FREE';
 
-    // Бейдж редакции
     const badge = document.getElementById('mode-badge');
     badge.innerText = 'Режим: ' + currentMode;
     badge.className = 'badge ' + (currentMode === 'PRO' ? 'badge-pro' : 'badge-free');
@@ -311,7 +356,6 @@ async function refreshData() {
       ownerEl.innerText = 'Бесплатная редакция (ограниченный функционал)';
     }
 
-    // Заполнение формы настроек PRO
     document.getElementById('cfg-poll-interval').value = (cfg.poll_interval_min || 120).toString();
     document.getElementById('cfg-remote-enabled').checked = !!cfg.remote_access_enabled;
     document.getElementById('cfg-remote-port').value = cfg.remote_port || 48123;
@@ -321,6 +365,7 @@ async function refreshData() {
     document.getElementById('cfg-backup-script').value = cfg.backup_script || '';
     document.getElementById('thresh-input-cpu').value = cfg.cpu_threshold || 70;
     document.getElementById('thresh-input-mb').value = cfg.mb_threshold || 50;
+    document.getElementById('thresh-input-space-pct').value = cfg.space_threshold_pct || 10;
 
     const remoteInd = document.getElementById('remote-indicator');
     if (cfg.remote_access_enabled) {
@@ -330,7 +375,6 @@ async function refreshData() {
       remoteInd.style.display = 'none';
     }
 
-    // Ограничения для Free режима
     const isFree = currentMode === 'FREE';
     document.getElementById('cfg-poll-interval').disabled = isFree;
     document.getElementById('cfg-remote-enabled').disabled = isFree;
@@ -339,42 +383,89 @@ async function refreshData() {
 
     document.getElementById('last-update').innerText = 'Обновлено: ' + new Date().toLocaleTimeString();
 
-    // 1. Системный том C:
+    // 1. ДИСК C: (Круговая диаграмма относительно полного объёма)
     if (r.system) {
       const free = r.system.free_gb || 0;
       const total = r.system.total_gb || 1;
       const used = Math.max(0, total - free);
-      const freePct = r.system.free_percent || 0;
-      const usedPct = Math.min(100, Math.max(0, (used / total) * 100));
+      const freePct = r.system.free_percent || (total > 0 ? (free / total) * 100 : 0);
 
       document.getElementById('free-gb').innerText = free.toFixed(1);
       document.getElementById('used-gb').innerText = used.toFixed(1);
       document.getElementById('total-gb').innerText = total.toFixed(1);
-      document.getElementById('free-pct').innerText = freePct.toFixed(0);
+      document.getElementById('donut-pct-text').innerText = freePct.toFixed(0) + '%';
 
-      const pFill = document.getElementById('space-progress');
-      pFill.style.width = usedPct.toFixed(1) + '%';
-      pFill.style.background = r.system.health_state === 'CRITICAL' ? 'var(--red)' : (r.system.health_state === 'WARNING' ? 'var(--orange)' : 'var(--green)');
+      // Отрисовка кольца
+      const spaceThresh = cfg.space_threshold_pct || 10;
+      let stateColor = 'var(--green)';
+      let stateLabel = 'В НОРМЕ';
+      let stateClass = 'chip-ok';
+
+      if (free < 5.0 || freePct <= spaceThresh) {
+        stateColor = 'var(--red)';
+        stateLabel = 'КРИТИЧНО';
+        stateClass = 'chip-crit';
+      } else if (free < 15.0 || freePct <= (spaceThresh + 5)) {
+        stateColor = 'var(--orange)';
+        stateLabel = 'ВНИМАНИЕ';
+        stateClass = 'chip-warn';
+      }
+
+      const arc = document.getElementById('donut-free-arc');
+      arc.setAttribute('stroke-dasharray', `${freePct.toFixed(1)} ${100 - freePct.toFixed(1)}`);
+      arc.style.stroke = stateColor;
+
+      document.getElementById('donut-pct-text').style.color = stateColor;
+      document.getElementById('legend-dot-free').style.background = stateColor;
 
       const spaceState = document.getElementById('space-state');
-      spaceState.innerText = r.system.health_state === 'CRITICAL' ? 'КРИТИЧНО' : (r.system.health_state === 'WARNING' ? 'ВНИМАНИЕ' : 'В НОРМЕ');
-      spaceState.className = 'chip ' + (r.system.health_state === 'CRITICAL' ? 'chip-crit' : (r.system.health_state === 'WARNING' ? 'chip-warn' : 'chip-ok'));
+      spaceState.innerText = stateLabel;
+      spaceState.className = 'chip ' + stateClass;
 
-      const cpuT = r.system.cpu_temp_c || 42;
-      const mbT = r.system.mb_temp_c || 36;
-      document.getElementById('cpu-temp-val').innerText = cpuT + '°C';
-      document.getElementById('mb-temp-val').innerText = mbT + '°C';
-      document.getElementById('cpu-bar').style.width = Math.min(100, cpuT) + '%';
-      document.getElementById('mb-bar').style.width = Math.min(100, (mbT/80)*100) + '%';
+      // 2. ТЕМПЕРАТУРЫ ЦП / ПЛАТЫ
+      const cpuT = r.system.cpu_temp_c || 0;
+      const mbT = r.system.mb_temp_c || 0;
+      const cpuThreshold = cfg.cpu_threshold || 70;
+      const mbThreshold = cfg.mb_threshold || 50;
+
+      const isCpuCrit = cpuT >= cpuThreshold;
+      const isMbCrit = mbT >= mbThreshold;
+
+      const cpuEl = document.getElementById('cpu-temp-val');
+      cpuEl.innerText = cpuT + '°C';
+      cpuEl.style.color = isCpuCrit ? 'var(--red)' : 'var(--text)';
+
+      const mbEl = document.getElementById('mb-temp-val');
+      mbEl.innerText = mbT + '°C';
+      mbEl.style.color = isMbCrit ? 'var(--red)' : 'var(--text)';
+
+      const cpuBar = document.getElementById('cpu-bar');
+      cpuBar.style.width = Math.min(100, cpuT) + '%';
+      cpuBar.style.background = isCpuCrit ? 'var(--red)' : 'var(--green)';
+
+      const mbBar = document.getElementById('mb-bar');
+      mbBar.style.width = Math.min(100, (mbT / 80) * 100) + '%';
+      mbBar.style.background = isMbCrit ? 'var(--red)' : 'var(--green)';
+
+      const sysBadge = document.getElementById('sys-temp-badge');
+      if (isCpuCrit || isMbCrit) {
+        sysBadge.innerText = 'ПЕРЕГРЕВ';
+        sysBadge.className = 'chip chip-crit';
+        document.getElementById('card-system-temps').style.borderColor = 'rgba(239, 68, 68, 0.6)';
+      } else {
+        sysBadge.innerText = 'В НОРМЕ';
+        sysBadge.className = 'chip chip-ok';
+        document.getElementById('card-system-temps').style.borderColor = 'var(--border)';
+      }
     }
 
-    // 2. Список накопителей
+    // 3. Диски
     const drives = r.drives || [];
     const dContainer = document.getElementById('drives-container');
     dContainer.innerHTML = '';
     
     if (drives.length === 0) {
-      dContainer.innerHTML = '<div style="color:var(--orange);">Физические накопители не найдены. Запустите приложение от имени Администратора.</div>';
+      dContainer.innerHTML = '<div style="color:var(--orange);">Физические накопители не найдены.</div>';
     } else {
       drives.forEach(d => {
         const userCrit = driveThresholds[d.index] || 50;
@@ -415,7 +506,7 @@ async function refreshData() {
       });
     }
 
-    // 3. Графики температур
+    // 4. Графики температур накопителей
     const tempContainer = document.getElementById('temp-charts-container');
     if (tempContainer.children.length !== drives.length) {
       tempContainer.innerHTML = '';
@@ -447,11 +538,6 @@ async function refreshData() {
       const badge = document.getElementById(`temp-badge-${d.index}`);
       if (badge) badge.innerText = d.temperature_c + '°C';
     });
-
-    // 4. График пространства C:
-    let spaceValues = h.map(x => x.free_gb || 0);
-    if (r.system && spaceValues.length < 2) spaceValues = [r.system.free_gb, r.system.free_gb];
-    renderSpaceChart('chart-space', spaceValues, labels, Math.max(50, ...spaceValues));
 
   } catch(e) { console.error(e); }
 }
@@ -504,35 +590,6 @@ function renderZonedLineChart(svgId, values, labels, critThreshold, diskIdx) {
     }
     const areaD = pathD + ` L ${points[points.length-1].x.toFixed(1)} ${(topPad + graphHeight).toFixed(1)} L ${points[0].x.toFixed(1)} ${(topPad + graphHeight).toFixed(1)} Z`;
     svgContent += `<path d="${areaD}" fill="url(#grad-curve-${diskIdx})" /><path d="${pathD}" class="spline-line" />`;
-    svgContent += `<text class="axis-label" x="${padLeft}" y="${h - 4}">${labels[0] || ''}</text><text class="axis-label" x="${w - padRight}" y="${h - 4}" text-anchor="end">${labels[labels.length - 1] || 'Сейчас'}</text>`;
-  }
-  svg.innerHTML = svgContent;
-}
-
-function renderSpaceChart(svgId, values, labels, maxGB) {
-  const svg = document.getElementById(svgId);
-  if (!svg) return;
-  const w = 700, h = 150, padLeft = 45, padRight = 30, topPad = 15, bottomPad = 25;
-  const graphHeight = h - topPad - bottomPad;
-  const graphWidth = w - padLeft - padRight;
-  const getY = (gb) => topPad + graphHeight - (Math.max(0, Math.min(maxGB, gb)) / (maxGB || 1)) * graphHeight;
-
-  let svgContent = `<defs><linearGradient id="grad-space" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#10b981" stop-opacity="0.35"/><stop offset="100%" stop-color="#10b981" stop-opacity="0.0"/></linearGradient></defs>`;
-  [0, maxGB * 0.5, maxGB].forEach(val => {
-    const y = getY(val);
-    svgContent += `<line class="grid-line" x1="${padLeft}" y1="${y}" x2="${w - padRight}" y2="${y}" /><text class="axis-label" x="${padLeft - 8}" y="${y + 4}" text-anchor="end">${val.toFixed(0)}ГБ</text>`;
-  });
-
-  if (values && values.length >= 2) {
-    const step = graphWidth / (values.length - 1);
-    let points = values.map((v, i) => ({ x: padLeft + i * step, y: getY(v) }));
-    let pathD = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
-    for (let i = 0; i < points.length - 1; i++) {
-      const cpX = ((points[i].x + points[i+1].x) / 2).toFixed(1);
-      pathD += ` C ${cpX} ${points[i].y.toFixed(1)}, ${cpX} ${points[i+1].y.toFixed(1)}, ${points[i+1].x.toFixed(1)} ${points[i+1].y.toFixed(1)}`;
-    }
-    const areaD = pathD + ` L ${points[points.length-1].x.toFixed(1)} ${(topPad + graphHeight).toFixed(1)} L ${points[0].x.toFixed(1)} ${(topPad + graphHeight).toFixed(1)} Z`;
-    svgContent += `<path d="${areaD}" fill="url(#grad-space)" /><path d="${pathD}" class="spline-space-line" />`;
     svgContent += `<text class="axis-label" x="${padLeft}" y="${h - 4}">${labels[0] || ''}</text><text class="axis-label" x="${w - padRight}" y="${h - 4}" text-anchor="end">${labels[labels.length - 1] || 'Сейчас'}</text>`;
   }
   svg.innerHTML = svgContent;

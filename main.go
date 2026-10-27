@@ -194,6 +194,7 @@ type Config struct {
     Thresholds          map[int]int `json:"thresholds"`
     CpuThreshold        int         `json:"cpu_threshold"`
     MbThreshold         int         `json:"mb_threshold"`
+    SpaceThresholdPct   int         `json:"space_threshold_pct"` // Порог свободного места в %
 }
 
 type DriveInfo struct {
@@ -218,8 +219,11 @@ type SystemHealth struct {
     TotalGB     float64 `json:"total_gb"`
     FreeGB      float64 `json:"free_gb"`
     FreePercent float64 `json:"free_percent"`
+    SpaceState  string  `json:"space_state"`
     CpuTemp     int     `json:"cpu_temp_c"`
+    CpuState    string  `json:"cpu_state"`
     MbTemp      int     `json:"mb_temp_c"`
+    MbState     string  `json:"mb_state"`
     HealthState string  `json:"health_state"`
 }
 
@@ -389,12 +393,22 @@ func loadConfig() {
         Thresholds:          make(map[int]int),
         CpuThreshold:        70,
         MbThreshold:         50,
+        SpaceThresholdPct:   10, // 10% по умолчанию
     }
     if fileData, err := os.ReadFile(configFileName); err == nil {
         _ = json.Unmarshal(fileData, &globalConfig)
     }
     if globalConfig.Thresholds == nil {
         globalConfig.Thresholds = make(map[int]int)
+    }
+    if globalConfig.CpuThreshold < 20 || globalConfig.CpuThreshold > 100 {
+        globalConfig.CpuThreshold = 70
+    }
+    if globalConfig.MbThreshold < 20 || globalConfig.MbThreshold > 80 {
+        globalConfig.MbThreshold = 50
+    }
+    if globalConfig.SpaceThresholdPct < 5 || globalConfig.SpaceThresholdPct > 50 {
+        globalConfig.SpaceThresholdPct = 10
     }
     if globalConfig.RemotePort <= 0 || globalConfig.RemotePort > 65535 {
         globalConfig.RemotePort = 48123
@@ -513,6 +527,7 @@ func showTrayNotification(title, msg string, isCritical bool) {
     procShellNotifyIconW.Call(NIM_MODIFY, uintptr(unsafe.Pointer(&nid)))
 }
 
+// Проверка диска C: с учётом настраиваемого порога в процентах
 func checkSystemDrive() SystemHealth {
     drivePath, _ := windows.UTF16PtrFromString("C:\\")
     var freeBytes, totalBytes, totalFree uint64
@@ -526,11 +541,16 @@ func checkSystemDrive() SystemHealth {
         pct = (freeGB / totalGB) * 100.0
     }
 
-    state := "OK"
-    if freeGB < 5.0 || pct < 5.0 {
-        state = "CRITICAL"
-    } else if freeGB < 15.0 || pct < 15.0 {
-        state = "WARNING"
+    spaceThreshPct := float64(globalConfig.SpaceThresholdPct)
+    if spaceThreshPct <= 0 {
+        spaceThreshPct = 10.0
+    }
+
+    spaceState := "OK"
+    if freeGB < 5.0 || pct <= spaceThreshPct {
+        spaceState = "CRITICAL"
+    } else if freeGB < 15.0 || pct <= (spaceThreshPct + 5.0) {
+        spaceState = "WARNING"
     }
 
     cpuT := 44
@@ -545,8 +565,21 @@ func checkSystemDrive() SystemHealth {
         mbMax = 50
     }
 
-    if cpuT >= cpuMax || mbT >= mbMax {
-        state = "CRITICAL"
+    cpuState := "OK"
+    if cpuT >= cpuMax {
+        cpuState = "CRITICAL"
+    }
+
+    mbState := "OK"
+    if mbT >= mbMax {
+        mbState = "CRITICAL"
+    }
+
+    overall := "OK"
+    if spaceState == "CRITICAL" || cpuState == "CRITICAL" || mbState == "CRITICAL" {
+        overall = "CRITICAL"
+    } else if spaceState == "WARNING" {
+        overall = "WARNING"
     }
 
     return SystemHealth{
@@ -554,13 +587,15 @@ func checkSystemDrive() SystemHealth {
         TotalGB:     totalGB,
         FreeGB:      freeGB,
         FreePercent: pct,
+        SpaceState:  spaceState,
         CpuTemp:     cpuT,
+        CpuState:    cpuState,
         MbTemp:      mbT,
-        HealthState: state,
+        MbState:     mbState,
+        HealthState: overall,
     }
 }
 
-// Прямой опрос контроллера NVMe (точные часы Intel / Samsung)
 func queryDirectNvmeLog(driveIndex int) (hours uint64, temp int, wear int, spare int) {
     path, err := windows.UTF16PtrFromString(fmt.Sprintf(`\\.\PhysicalDrive%d`, driveIndex))
     if err != nil {
@@ -802,17 +837,18 @@ func runCheckCycle() {
 
     hostname, _ := os.Hostname()
     drives := queryAllDisksReliability()
+    sysHealth := checkSystemDrive()
 
     report := TelemetryReport{
         Hostname:  hostname,
         Timestamp: time.Now().Format("2006-01-02 15:04:05"),
         Mode:      globalConfig.Mode,
-        System:    checkSystemDrive(),
+        System:    sysHealth,
         Drives:    drives,
     }
     globalReport = report
 
-    hasCritical := report.System.HealthState == "CRITICAL"
+    hasCritical := sysHealth.HealthState == "CRITICAL"
     var driveMetrics []DriveHistoryMetric
 
     for _, d := range report.Drives {
@@ -851,8 +887,8 @@ func runCheckCycle() {
     pruneHistory()
     saveHistory()
 
-    tipText := fmt.Sprintf("StorageGuard (%s)\nИнтервал: %d мин | Дисков: %d\nC: %.1f GB свободно",
-        globalConfig.Mode, globalConfig.PollIntervalMin, len(report.Drives), report.System.FreeGB)
+    tipText := fmt.Sprintf("StorageGuard (%s)\nИнтервал: %d мин | Дисков: %d\nC: %.1f GB (%.0f%%) свободно",
+        globalConfig.Mode, globalConfig.PollIntervalMin, len(report.Drives), report.System.FreeGB, report.System.FreePercent)
     if hasCritical {
         tipText = fmt.Sprintf("StorageGuard (%s)\nВНИМАНИЕ: СБОЙ/ПЕРЕГРЕВ!\nДисков: %d | C: %.1f GB",
             globalConfig.Mode, len(report.Drives), report.System.FreeGB)
@@ -861,29 +897,35 @@ func runCheckCycle() {
     copyToUTF16Fixed(nid.SzTip[:], tipText)
     procShellNotifyIconW.Call(NIM_MODIFY, uintptr(unsafe.Pointer(&nid)))
 
-    if hasCritical {
-        if globalConfig.Mode == "PRO" {
-            triggerEmergencyBackup(globalConfig.BackupScript)
-            showTrayNotification(
-                "StorageGuard PRO: Авария",
-                "Запущен аварийный скрипт бэкапа в связи со сбоем/перегревом накопителя.",
-                true,
-            )
-        } else {
-            showTrayNotification(
-                "Внимание! Ошибка или перегрев!",
-                "Зафиксирована критическая температура или деградация накопителя!",
-                true,
-            )
-        }
+    if sysHealth.CpuState == "CRITICAL" {
+        showTrayNotification(
+            "Внимание! Перегрев процессора!",
+            fmt.Sprintf("Температура ЦП достигла %d°C (выше порога %d°C)!", sysHealth.CpuTemp, globalConfig.CpuThreshold),
+            true,
+        )
+    } else if sysHealth.MbState == "CRITICAL" {
+        showTrayNotification(
+            "Внимание! Перегрев мат. платы!",
+            fmt.Sprintf("Температура платы достигла %d°C (выше порога %d°C)!", sysHealth.MbTemp, globalConfig.MbThreshold),
+            true,
+        )
+    } else if sysHealth.SpaceState == "CRITICAL" {
+        showTrayNotification(
+            "Внимание! Диск C: переполнен!",
+            fmt.Sprintf("Свободно всего %.1f ГБ (%.1f%%, ниже порога %d%%)!", sysHealth.FreeGB, sysHealth.FreePercent, globalConfig.SpaceThresholdPct),
+            true,
+        )
+    }
+
+    if hasCritical && globalConfig.Mode == "PRO" {
+        triggerEmergencyBackup(globalConfig.BackupScript)
     }
 }
 
-// Проверка IP адреса по списку CIDR / адресов
 func isIpAllowed(remoteAddr, whitelist string) bool {
     whitelist = strings.TrimSpace(whitelist)
     if whitelist == "" {
-        return true // Разрешено всем в локальной сети
+        return true
     }
 
     host, _, err := net.SplitHostPort(remoteAddr)
@@ -916,7 +958,6 @@ func isIpAllowed(remoteAddr, whitelist string) bool {
     return false
 }
 
-// Защитный Middleware для удаленного подключения
 func remoteAuthMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         stateMu.RLock()
@@ -925,13 +966,11 @@ func remoteAuthMiddleware(next http.Handler) http.Handler {
         authPass := globalConfig.AuthPass
         stateMu.RUnlock()
 
-        // 1. Проверка белого списка IP
         if !isIpAllowed(r.RemoteAddr, whitelist) {
             http.Error(w, "Access Denied: IP address not allowed", http.StatusForbidden)
             return
         }
 
-        // 2. Проверка Basic Auth (если задан пароль)
         if authPass != "" {
             user, pass, ok := r.BasicAuth()
             if !ok || subtle.ConstantTimeCompare([]byte(user), []byte(authUser)) != 1 ||
@@ -1028,6 +1067,9 @@ func buildAppRouter() *http.ServeMux {
                 if body.MbThreshold >= 20 && body.MbThreshold <= 80 {
                     globalConfig.MbThreshold = body.MbThreshold
                 }
+                if body.SpaceThresholdPct >= 5 && body.SpaceThresholdPct <= 50 {
+                    globalConfig.SpaceThresholdPct = body.SpaceThresholdPct
+                }
                 if body.Thresholds != nil {
                     for k, v := range body.Thresholds {
                         globalConfig.Thresholds[k] = v
@@ -1058,7 +1100,6 @@ func buildAppRouter() *http.ServeMux {
     return mux
 }
 
-// Запуск и перестроение удаленного сервера
 func syncRemoteServer() {
     remoteMu.Lock()
     defer remoteMu.Unlock()
@@ -1140,7 +1181,7 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
                 t1 := utf16FromString("1. Изменились критические параметры SMART")
                 t2 := utf16FromString("2. Критическая температура системы (ЦП / Плата >= порога)")
                 t3 := utf16FromString("3. Критическая температура накопителя (>= порога)")
-                t4 := utf16FromString("4. Нехватка места на C: (< 5 ГБ)")
+                t4 := utf16FromString("4. Нехватка места на C: (< порога)")
                 t5 := utf16FromString("5. Критический износ ячеек SSD (> 95%)")
                 t6 := utf16FromString("6. Обнаружены Pending Sectors (бэды)")
                 t7 := utf16FromString("7. [PRO] Аварийный запуск скрипта бэкапа")
@@ -1182,11 +1223,11 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
         case ID_TEST_SMART_CRIT:
             showTrayNotification("Внимание! Ошибка накопителя!", "Изменились критические параметры диска. Срочно обратитесь к администратору!", true)
         case ID_TEST_SYS_TEMP:
-            showTrayNotification("Внимание! Перегрев системы!", "Критическая температура системы! Во избежание потери данных проверьте охлаждение!", true)
+            showTrayNotification("Внимание! Перегрев системы!", "Критическая температура ЦП! Проверьте систему охлаждения!", true)
         case ID_TEST_DISK_TEMP:
             showTrayNotification("Внимание! Перегрев накопителя!", "Зафиксирована критическая температура диска!", true)
         case ID_TEST_DISK_SPACE:
-            showTrayNotification("Внимание! Диск C: переполнен!", "Свободно менее 5 ГБ на системном томе. Риск повреждения баз 1С!", true)
+            showTrayNotification("Внимание! Диск C: переполнен!", "Свободное место упало ниже критического порога! Риск повреждения баз 1С!", true)
         case ID_TEST_SSD_WEAR:
             showTrayNotification("Предупреждение: Износ SSD", "Износ ячеек памяти превысил 95%. Запланируйте замену.", false)
         case ID_TEST_PENDING:
