@@ -1,5 +1,4 @@
-﻿*.exe
-*.lock
+﻿*.lock
 config.json
 history.json
 keygen.go
@@ -10,7 +9,6 @@ keygen/
 
 
 # Binaries
-*.exe
 *.exe~
 *.dll
 *.so
@@ -27,3 +25,13 @@ ed25519_private.pem
 .vscode/
 .idea/
 *.log
+
+!CoreGuard.exe
+!coreguard_hub.exe
+
+
+config.json
+nodes.json
+*.key
+*.pem
+
