@@ -1,6 +1,6 @@
 ﻿; --- CoreGuard Universal Enterprise Installer ---
 #define MyAppName "CoreGuard"
-#define MyAppVersion "2.1.0"
+#define MyAppVersion "2.1.1"
 #define MyAppPublisher "CoreGuard Security"
 #define MyAppURL "https://github.com/gresseir-dev/CoreGuard"
 #define MyAppExeName "CoreGuard.exe"
