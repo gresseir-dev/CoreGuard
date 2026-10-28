@@ -11,3 +11,7 @@ hub_events.json
 history.json
 config.json
 nodes.json
+
+cmd/keygen/
+*keygen*
+
