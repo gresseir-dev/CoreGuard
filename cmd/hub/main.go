@@ -26,12 +26,13 @@ type TelegramConfig struct {
 }
 
 type NodeConfig struct {
-    ID       string `json:"id"`
-    Name     string `json:"name"`
-    Group    string `json:"group"`
-    Host     string `json:"host"`
-    AuthUser string `json:"auth_user"`
-    AuthPass string `json:"auth_pass"`
+    ID             string `json:"id"`
+    Name           string `json:"name"`
+    Group          string `json:"group"`
+    Host           string `json:"host"`
+    AuthUser       string `json:"auth_user"`
+    AuthPass       string `json:"auth_pass"`
+    AlertOnOffline bool   `json:"alert_on_offline"`
 }
 
 type NodeStatus struct {
@@ -103,7 +104,7 @@ func (h *HubManager) LoadSettings() {
     if err != nil {
         h.language = "ru"
         h.nodes = []NodeConfig{
-            {ID: "local-pc", Name: "Локальный хост", Group: "IT Сервер", Host: "127.0.0.1:48123", AuthUser: "admin", AuthPass: ""},
+            {ID: "local-pc", Name: "Локальный хост", Group: "IT Сервер", Host: "127.0.0.1:48123", AuthUser: "admin", AuthPass: "", AlertOnOffline: true},
         }
         h.saveDiskLocked()
     } else {
@@ -289,11 +290,13 @@ func (h *HubManager) dispatchAlert(node NodeConfig, st *NodeStatus) {
         }
         h.recordEvent(node, "WARNING", msg)
     } else if curr == "OFFLINE" {
-        msg := "Узел не отвечает по сети"
-        if !isRu {
-            msg = "Host is unreachable on network"
+        if node.AlertOnOffline {
+            msg := "Узел не отвечает по сети"
+            if !isRu {
+                msg = "Host is unreachable on network"
+            }
+            h.recordEvent(node, "OFFLINE", msg)
         }
-        h.recordEvent(node, "OFFLINE", msg)
     } else if curr == "HEALTHY" && (prev == "CRITICAL" || prev == "WARNING" || prev == "OFFLINE") {
         // Показатели пришли в норму — помечаем активные события узла как resolved
         h.resolveActiveEventsForNode(node.ID)
@@ -301,14 +304,20 @@ func (h *HubManager) dispatchAlert(node NodeConfig, st *NodeStatus) {
 
     // 2. Отправка в Telegram
     var msg string
-    if curr == "OFFLINE" && tg.NotifyOnOffline {
+    if curr == "OFFLINE" && tg.NotifyOnOffline && node.AlertOnOffline {
         msg = h.getLocalizedAlert("OFFLINE", node, st)
     } else if curr == "CRITICAL" && tg.NotifyOnCrit {
         msg = h.getLocalizedAlert("CRITICAL", node, st)
     } else if curr == "WARNING" && tg.NotifyOnWarn {
         msg = h.getLocalizedAlert("WARNING", node, st)
-    } else if curr == "HEALTHY" && (prev == "CRITICAL" || prev == "OFFLINE" || prev == "WARNING") {
-        msg = h.getLocalizedAlert("HEALTHY", node, st)
+    } else if curr == "HEALTHY" {
+        if prev == "OFFLINE" {
+            if tg.NotifyOnOffline && node.AlertOnOffline {
+                msg = h.getLocalizedAlert("HEALTHY", node, st)
+            }
+        } else if prev == "CRITICAL" || prev == "WARNING" {
+            msg = h.getLocalizedAlert("HEALTHY", node, st)
+        }
     }
 
     if msg != "" {
@@ -617,5 +626,7 @@ func main() {
     fmt.Printf("[CoreGuard Enterprise Central] Server listening on http://127.0.0.1:%s\n", port)
     log.Fatal(http.ListenAndServe(":"+port, nil))
 }
+
+
 
 

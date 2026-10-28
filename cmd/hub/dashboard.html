@@ -83,7 +83,11 @@
       <h2>CoreGuard Central</h2>
       <span class="tag-ent">Enterprise NOC</span>
     </div>
-    <div style="display:flex; gap: 10px;">
+    <div style="display:flex; gap: 10px; align-items: center;">
+      <div style="display:flex; background:var(--card); border:1px solid var(--border); border-radius:6px; overflow:hidden;">
+        <button id="view-btn-grid" title="Вид: Сетка" onclick="setViewModeQuick('grid')" style="background:transparent; border:none; padding:6px 10px; cursor:pointer; color:var(--text); font-size:13px;">⊞ Карточки</button>
+        <button id="view-btn-list" title="Вид: Список" onclick="setViewModeQuick('list')" style="background:transparent; border:none; padding:6px 10px; cursor:pointer; color:var(--text); font-size:13px;">☰ Список</button>
+      </div>
       <button class="btn btn-alert" id="btn-events-open" onclick="openEventsModal()">
         🔔 Журнал тревог <span class="unread-pill" id="unread-count-pill">0</span>
       </button>
@@ -168,13 +172,18 @@
             <div class="form-group"><label>Host:Port</label><input type="text" id="n-host" class="form-input" placeholder="192.168.1.10:48123"></div>
             <div class="form-group"><label>Логин</label><input type="text" id="n-user" class="form-input" value="admin"></div>
             <div class="form-group"><label>Пароль</label><input type="password" id="n-pass" class="form-input" placeholder="Пароль Basic Auth"></div>
+            <div class="form-group" style="grid-column: span 2; display: flex; align-items: center; padding-top: 6px;">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px;">
+                <input type="checkbox" id="n-alert-offline" checked> <strong>Сервер 24/7 (Оповещать при недоступности в Telegram)</strong>
+              </label>
+            </div>
           </div>
           <div style="margin-bottom: 16px;">
             <button class="btn" onclick="saveNodeItem()">💾 Записать узел</button>
             <button class="btn btn-secondary" onclick="resetForm()">Очистить форму</button>
           </div>
           <table class="table">
-            <thead><tr><th>ID</th><th>Название</th><th>Группа</th><th>Хост</th><th>Действия</th></tr></thead>
+            <thead><tr><th>ID</th><th>Название</th><th>Группа</th><th>Хост</th><th>Режим</th><th>Действия</th></tr></thead>
             <tbody id="nodes-table-body"></tbody>
           </table>
         </div>
@@ -186,6 +195,13 @@
               <select id="hub-language" class="form-select" style="max-width: 240px; margin-top: 4px;">
                 <option value="ru">Русский (RU)</option>
                 <option value="en">English (EN)</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label><strong>🖥 Вид отображения узлов:</strong></label>
+              <select id="hub-view-mode" class="form-select" style="max-width: 240px; margin-top: 4px;">
+                <option value="grid">Карточки (Сетка)</option>
+                <option value="list">Компактный список (Таблица)</option>
               </select>
             </div>
             <hr style="border: none; border-top: 1px solid var(--border); margin: 16px 0;">
@@ -221,7 +237,32 @@
   </div>
 
   <script>
-    let appConfig = { language: 'ru', nodes: [], telegram: {} };
+    let appConfig = { language: 'ru', view_mode: 'grid', nodes: [], telegram: {} };
+
+    async function setViewModeQuick(mode) {
+      appConfig.view_mode = mode;
+      updateViewToggleButtons();
+      try {
+        await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(appConfig)
+        });
+      } catch(e) {}
+      loadHub();
+    }
+
+    function updateViewToggleButtons() {
+      const isList = (appConfig.view_mode === 'list');
+      const bGrid = document.getElementById('view-btn-grid');
+      const bList = document.getElementById('view-btn-list');
+      if (bGrid && bList) {
+        bGrid.style.background = isList ? 'transparent' : 'var(--blue)';
+        bGrid.style.color = isList ? 'var(--text-muted)' : '#fff';
+        bList.style.background = isList ? 'var(--blue)' : 'transparent';
+        bList.style.color = isList ? '#fff' : 'var(--text-muted)';
+      }
+    }
 
     async function loadHub() {
       try {
@@ -229,8 +270,39 @@
         const nodes = await res.json();
         
         let total = 0, ok = 0, warn = 0, crit = 0;
+        updateViewToggleButtons();
         const grid = document.getElementById('nodes-grid');
         grid.innerHTML = '';
+        const isList = (appConfig.view_mode === 'list');
+        let tableTbody = null;
+        if (isList) {
+          grid.className = '';
+          const tableWrap = document.createElement('div');
+          tableWrap.style.cssText = 'background:var(--card); border:1px solid var(--border); border-radius:8px; overflow-x:auto; padding:8px;';
+          tableWrap.innerHTML = `
+            <table class="table" style="margin:0;">
+              <thead>
+                <tr>
+                  <th>Статус</th>
+                  <th>Компьютер / Имя</th>
+                  <th>Группа</th>
+                  <th>Хост</th>
+                  <th>Тип</th>
+                  <th>ЦП / Плата</th>
+                  <th>Диск C:</th>
+                  <th>Накопители</th>
+                  <th>Срез</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody id="nodes-list-tbody"></tbody>
+            </table>
+          `;
+          grid.appendChild(tableWrap);
+          tableTbody = tableWrap.querySelector('#nodes-list-tbody');
+        } else {
+          grid.className = 'grid';
+        }
 
         for (const [id, st] of Object.entries(nodes)) {
           total++;
@@ -254,6 +326,30 @@
             </div>`;
 
           let incidentPill = st.has_unread_alert ? `<span class="incident-marker" title="Были неквитированные инциденты">⚡ Был сбой</span>` : '';
+
+          if (isList) {
+            const tr = document.createElement('tr');
+            let metricsTd = st.online ? `
+              <td>${st.cpu_temp}°C / ${st.mb_temp}°C</td>
+              <td>${st.free_gb.toFixed(1)} GB (${st.free_pct.toFixed(0)}%)</td>
+              <td>${st.drives_total} шт. ${st.drives_crit > 0 ? '<span style=\"color:var(--red); font-weight:bold;\">(⚠ ' + st.drives_crit + ')</span>' : ''}</td>
+            ` : `
+              <td colspan=\"3\" style=\"color:var(--text-muted); font-size:12px;\">${st.overall === 'NO_LICENSE' ? 'Требуется Enterprise' : 'Недоступен'}</td>
+            `;
+            let isSrv = (st.config.alert_on_offline !== false) ? '<span style=\"color:var(--blue);font-size:11px;\">🖥 Сервер</span>' : '<span style=\"color:var(--text-muted);font-size:11px;\">💻 ПК</span>';
+            tr.innerHTML = `
+              <td><span class=\"badge badge-${st.overall}\">${st.overall}</span></td>
+              <td><strong>${st.config.name}</strong> ${incidentPill}</td>
+              <td>${st.config.group}</td>
+              <td><code>${st.config.host}</code></td>
+              <td>${isSrv}</td>
+              ${metricsTd}
+              <td style=\"font-size:12px; color:var(--text-muted);\">${st.last_seen}</td>
+              <td><a href=\"http://${st.config.host}\" target=\"_blank\" style=\"color:var(--blue); text-decoration:none; font-size:12px;\">Открыть ↗</a></td>
+            `;
+            tableTbody.appendChild(tr);
+            continue;
+          }
 
           card.innerHTML = `
             <div class="node-top">
@@ -411,6 +507,7 @@
       renderNodesTable();
       
       document.getElementById('hub-language').value = appConfig.language || 'ru';
+      document.getElementById('hub-view-mode').value = appConfig.view_mode || 'grid';
       const tg = appConfig.telegram || {};
       document.getElementById('tg-enabled').checked = !!tg.enabled;
       document.getElementById('tg-token').value = tg.bot_token || '';
@@ -437,6 +534,7 @@
           <td>${n.name}</td>
           <td>${n.group}</td>
           <td><code>${n.host}</code></td>
+          <td>${n.alert_on_offline !== false ? '<span style="color:var(--blue);font-weight:600;">🖥 Сервер 24/7</span>' : '<span style="color:var(--text-muted);">💻 Рабочая станция</span>'}</td>
           <td>
             <button class="btn btn-secondary" style="padding: 2px 6px; font-size: 11px;" onclick="editNode(${idx})">Правка</button>
             <button class="btn btn-danger" style="padding: 2px 6px; font-size: 11px;" onclick="deleteNode(${idx})">Удалить</button>
@@ -453,6 +551,7 @@
       document.getElementById('n-host').value = '';
       document.getElementById('n-user').value = 'admin';
       document.getElementById('n-pass').value = '';
+      document.getElementById('n-alert-offline').checked = true;
       document.getElementById('n-id').removeAttribute('disabled');
     }
 
@@ -465,6 +564,7 @@
       document.getElementById('n-host').value = n.host;
       document.getElementById('n-user').value = n.auth_user || '';
       document.getElementById('n-pass').value = n.auth_pass || '';
+      document.getElementById('n-alert-offline').checked = n.alert_on_offline !== false;
     }
 
     function saveNodeItem() {
@@ -474,11 +574,12 @@
       const host = document.getElementById('n-host').value.trim();
       const user = document.getElementById('n-user').value.trim();
       const pass = document.getElementById('n-pass').value;
+      const alertOffline = document.getElementById('n-alert-offline').checked;
 
       if (!id || !name || !host) return alert("Заполните ID, Название и Host:Port!");
 
       const idx = appConfig.nodes.findIndex(x => x.id === id);
-      const item = { id, name, group, host, auth_user: user, auth_pass: pass };
+      const item = { id, name, group, host, auth_user: user, auth_pass: pass, alert_on_offline: alertOffline };
       if (idx >= 0) appConfig.nodes[idx] = item;
       else appConfig.nodes.push(item);
 
@@ -495,6 +596,7 @@
 
     async function saveAllSettings() {
       appConfig.language = document.getElementById('hub-language').value;
+      appConfig.view_mode = document.getElementById('hub-view-mode').value;
       appConfig.telegram = {
         enabled: document.getElementById('tg-enabled').checked,
         bot_token: document.getElementById('tg-token').value.trim(),
@@ -532,4 +634,5 @@
   </script>
 </body>
 </html>
+
 
