@@ -1,0 +1,535 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>CoreGuard Enterprise Central</title>
+  <style>
+    :root {
+      --bg: #090d16; --card: #121826; --border: #1f293d; --text: #f1f5f9;
+      --text-muted: #94a3b8; --green: #10b981; --yellow: #f59e0b; --red: #ef4444; --blue: #3b82f6; --purple: #a855f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 24px; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+    .title-box { display: flex; align-items: center; gap: 12px; }
+    .tag-ent { background: #6366f1; color: #fff; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; }
+    
+    .btn { background: var(--blue); color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+    .btn:hover { background: #2563eb; }
+    .btn-secondary { background: rgba(255,255,255,0.08); color: var(--text); }
+    .btn-secondary:hover { background: rgba(255,255,255,0.15); }
+    .btn-danger { background: rgba(239, 68, 68, 0.2); color: var(--red); border: 1px solid var(--red); }
+    .btn-warning { background: rgba(245, 158, 11, 0.2); color: var(--yellow); border: 1px solid var(--yellow); }
+
+    .btn-alert { position: relative; background: rgba(255,255,255,0.08); color: var(--text); }
+    .btn-alert.has-unread { background: rgba(239, 68, 68, 0.15); border: 1px solid var(--red); color: #fca5a5; }
+    .unread-pill { display: none; background: var(--red); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 10px; margin-left: 6px; }
+    .has-unread .unread-pill { display: inline-block; animation: pulse 1.5s infinite; }
+    
+    .stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .stat-val { font-size: 28px; font-weight: 700; margin-top: 4px; }
+    
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+    .node-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; transition: border-color 0.15s; position: relative; }
+    .node-card:hover { border-color: #3b82f6; }
+    .node-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    .node-name { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .node-group { font-size: 12px; color: var(--text-muted); }
+    
+    .badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; }
+    .badge-HEALTHY { background: rgba(16, 185, 129, 0.2); color: var(--green); border: 1px solid var(--green); }
+    .badge-WARNING { background: rgba(245, 158, 11, 0.2); color: var(--yellow); border: 1px solid var(--yellow); }
+    .badge-CRITICAL { background: rgba(239, 68, 68, 0.2); color: var(--red); border: 1px solid var(--red); animation: pulse 1.5s infinite; }
+    .badge-OFFLINE { background: rgba(148, 163, 184, 0.2); color: var(--text-muted); border: 1px solid var(--border); }
+    .badge-NO_LICENSE { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #c084fc; }
+
+    .incident-marker { background: rgba(245, 158, 11, 0.2); color: var(--yellow); border: 1px solid var(--yellow); font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+    
+    .metrics-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; font-size: 13px; background: rgba(255,255,255,0.02); padding: 8px; border-radius: 6px; }
+    .node-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: 11px; color: var(--text-muted); }
+
+    /* Modal */
+    .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 100; justify-content: center; align-items: center; }
+    .modal { background: var(--card); border: 1px solid var(--border); border-radius: 10px; width: 850px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .modal-body { padding: 20px; overflow-y: auto; }
+    .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); }
+    
+    .tabs { display: flex; gap: 10px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+    .tab-btn { background: transparent; border: none; color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer; padding: 6px 12px; border-radius: 6px; }
+    .tab-btn.active { background: var(--blue); color: #fff; }
+
+    .table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
+    .table th, .table td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border); }
+    .table th { color: var(--text-muted); }
+    
+    .form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; background: rgba(255,255,255,0.02); padding: 16px; border-radius: 8px; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group label { font-size: 12px; color: var(--text-muted); }
+    .form-input, .form-select { background: #0b0f19; border: 1px solid var(--border); color: #fff; padding: 8px 10px; border-radius: 6px; font-size: 13px; outline: none; }
+
+    .ev-row-unread { background: rgba(239, 68, 68, 0.05); }
+    .ev-resolved-tag { font-size: 10px; color: var(--green); border: 1px solid var(--green); padding: 1px 4px; border-radius: 3px; font-weight: 600; margin-left: 4px; }
+    .ev-active-tag { font-size: 10px; color: var(--red); border: 1px solid var(--red); padding: 1px 4px; border-radius: 3px; font-weight: 600; margin-left: 4px; }
+
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="title-box">
+      <h2>CoreGuard Central</h2>
+      <span class="tag-ent">Enterprise NOC</span>
+    </div>
+    <div style="display:flex; gap: 10px;">
+      <button class="btn btn-alert" id="btn-events-open" onclick="openEventsModal()">
+        🔔 Журнал тревог <span class="unread-pill" id="unread-count-pill">0</span>
+      </button>
+      <button class="btn btn-secondary" onclick="openConfigModal()">⚙ Настройки & Узлы</button>
+    </div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div style="font-size:12px; color:var(--text-muted);">ВСЕГО УЗЛОВ</div>
+      <div class="stat-val" id="cnt-total">0</div>
+    </div>
+    <div class="stat-card">
+      <div style="font-size:12px; color:var(--green);">ОНЛАЙН / В НОРМЕ</div>
+      <div class="stat-val" style="color:var(--green);" id="cnt-ok">0</div>
+    </div>
+    <div class="stat-card">
+      <div style="font-size:12px; color:var(--yellow);">ТРЕБУЮТ ВНИМАНИЯ</div>
+      <div class="stat-val" style="color:var(--yellow);" id="cnt-warn">0</div>
+    </div>
+    <div class="stat-card">
+      <div style="font-size:12px; color:var(--red);">КРИТИЧЕСКИЕ СБОИ</div>
+      <div class="stat-val" style="color:var(--red);" id="cnt-crit">0</div>
+    </div>
+  </div>
+
+  <div class="grid" id="nodes-grid"></div>
+
+  <!-- Модальное окно журнала тревог (ACK) -->
+  <div class="modal-backdrop" id="events-modal">
+    <div class="modal" style="width: 950px;">
+      <div class="modal-head">
+        <h3>Журнал инцидентов и алертов</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeEventsModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 14px;">
+          <span style="font-size: 13px; color: var(--text-muted);">
+            События сохраняются даже после восстановления нормы до подтверждения администратором.
+          </span>
+          <button class="btn btn-secondary" onclick="ackAllEvents()">✓ Подтвердить все (Прочитано)</button>
+        </div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Время</th>
+              <th>Узел / Группа</th>
+              <th>Статус</th>
+              <th>Описание инцидента</th>
+              <th>Состояние</th>
+              <th>Действие</th>
+            </tr>
+          </thead>
+          <tbody id="events-table-body"></tbody>
+        </table>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-secondary" onclick="closeEventsModal()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно конфигуратора -->
+  <div class="modal-backdrop" id="config-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Центр управления CoreGuard Enterprise</h3>
+        <button class="btn btn-secondary" style="padding: 4px 8px;" onclick="closeConfigModal()">✕</button>
+      </div>
+      
+      <div class="modal-body">
+        <div class="tabs">
+          <button class="tab-btn active" id="tab-btn-nodes" onclick="switchTab('nodes')">🖥 Парк компьютеров (Nodes)</button>
+          <button class="tab-btn" id="tab-btn-tg" onclick="switchTab('tg')">✈️ Telegram & Язык оповещений</button>
+        </div>
+
+        <div id="tab-nodes">
+          <div class="form-grid">
+            <div class="form-group"><label>ID</label><input type="text" id="n-id" class="form-input" placeholder="srv-01"></div>
+            <div class="form-group"><label>Название / Hostname</label><input type="text" id="n-name" class="form-input" placeholder="Сервер БД"></div>
+            <div class="form-group"><label>Группа / Отдел</label><input type="text" id="n-group" class="form-input" placeholder="Серверная"></div>
+            <div class="form-group"><label>Host:Port</label><input type="text" id="n-host" class="form-input" placeholder="192.168.1.10:48123"></div>
+            <div class="form-group"><label>Логин</label><input type="text" id="n-user" class="form-input" value="admin"></div>
+            <div class="form-group"><label>Пароль</label><input type="password" id="n-pass" class="form-input" placeholder="Пароль Basic Auth"></div>
+          </div>
+          <div style="margin-bottom: 16px;">
+            <button class="btn" onclick="saveNodeItem()">💾 Записать узел</button>
+            <button class="btn btn-secondary" onclick="resetForm()">Очистить форму</button>
+          </div>
+          <table class="table">
+            <thead><tr><th>ID</th><th>Название</th><th>Группа</th><th>Хост</th><th>Действия</th></tr></thead>
+            <tbody id="nodes-table-body"></tbody>
+          </table>
+        </div>
+
+        <div id="tab-tg" style="display: none;">
+          <div style="background: rgba(255,255,255,0.02); padding: 16px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 16px;">
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label><strong>🌐 Язык сообщений и алертов:</strong></label>
+              <select id="hub-language" class="form-select" style="max-width: 240px; margin-top: 4px;">
+                <option value="ru">Русский (RU)</option>
+                <option value="en">English (EN)</option>
+              </select>
+            </div>
+            <hr style="border: none; border-top: 1px solid var(--border); margin: 16px 0;">
+            <div style="margin-bottom: 12px;">
+              <label style="display:flex; align-items:center; gap: 8px; cursor:pointer;">
+                <input type="checkbox" id="tg-enabled"> <strong>Включить отправку алертов в Telegram</strong>
+              </label>
+            </div>
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label>Telegram Bot Token:</label>
+              <input type="text" id="tg-token" class="form-input" placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ">
+            </div>
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label>Chat ID:</label>
+              <input type="text" id="tg-chat-id" class="form-input" placeholder="-100123456789 или 987654321">
+            </div>
+            <div style="display:flex; flex-direction:column; gap: 8px; font-size: 13px;">
+              <label><input type="checkbox" id="tg-on-crit" checked> Оповещать при авариях (CRITICAL)</label>
+              <label><input type="checkbox" id="tg-on-offline" checked> Оповещать при падении (OFFLINE)</label>
+              <label><input type="checkbox" id="tg-on-warn"> Оповещать при предупреждениях (WARNING)</label>
+            </div>
+          </div>
+          <button class="btn btn-secondary" onclick="testTelegram()">🔔 Тест Telegram</button>
+        </div>
+
+      </div>
+
+      <div class="modal-foot">
+        <button class="btn btn-secondary" onclick="closeConfigModal()">Отмена</button>
+        <button class="btn" onclick="saveAllSettings()">💾 Сохранить настройки</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let appConfig = { language: 'ru', nodes: [], telegram: {} };
+
+    async function loadHub() {
+      try {
+        const res = await fetch('/api/nodes');
+        const nodes = await res.json();
+        
+        let total = 0, ok = 0, warn = 0, crit = 0;
+        const grid = document.getElementById('nodes-grid');
+        grid.innerHTML = '';
+
+        for (const [id, st] of Object.entries(nodes)) {
+          total++;
+          if (st.overall === 'HEALTHY') ok++;
+          else if (st.overall === 'WARNING') warn++;
+          else if (st.overall === 'CRITICAL') crit++;
+
+          const card = document.createElement('div');
+          card.className = 'node-card';
+          
+          let offlineMsg = (st.overall === 'NO_LICENSE') ? 'Требуется лицензия ENTERPRISE' : 'Хост недоступен или выключен';
+          let content = st.online ? `
+            <div class="metrics-row">
+              <div>ЦП: <strong>${st.cpu_temp}°C</strong></div>
+              <div>Плата: <strong>${st.mb_temp}°C</strong></div>
+              <div>Диск C:: <strong>${st.free_gb.toFixed(1)} GB</strong> (${st.free_pct.toFixed(0)}%)</div>
+              <div>Накопителей: <strong>${st.drives_total}</strong></div>
+            </div>` : `
+            <div style="padding: 16px 0; color: var(--text-muted); font-size: 13px; text-align: center;">
+              ${offlineMsg}
+            </div>`;
+
+          let incidentPill = st.has_unread_alert ? `<span class="incident-marker" title="Были неквитированные инциденты">⚡ Был сбой</span>` : '';
+
+          card.innerHTML = `
+            <div class="node-top">
+              <div>
+                <div class="node-name">${st.config.name} ${incidentPill}</div>
+                <div class="node-group">${st.config.group} • ${st.config.host}</div>
+              </div>
+              <span class="badge badge-${st.overall}">${st.overall}</span>
+            </div>
+            ${content}
+            <div class="node-footer">
+              <span>Срез: ${st.last_seen}</span>
+              <a href="http://${st.config.host}" target="_blank" style="color:var(--blue); text-decoration:none;">Открыть ПК ↗</a>
+            </div>
+          `;
+          grid.appendChild(card);
+        }
+
+        document.getElementById('cnt-total').innerText = total;
+        document.getElementById('cnt-ok').innerText = ok;
+        document.getElementById('cnt-warn').innerText = warn;
+        document.getElementById('cnt-crit').innerText = crit;
+
+      } catch(e) { console.error(e); }
+      
+      checkEventsBadge();
+    }
+
+    async function checkEventsBadge() {
+      try {
+        const res = await fetch('/api/events');
+        const data = await res.json();
+        const btn = document.getElementById('btn-events-open');
+        const pill = document.getElementById('unread-count-pill');
+        
+        if (data.unread_count > 0) {
+          btn.classList.add('has-unread');
+          pill.innerText = data.unread_count;
+        } else {
+          btn.classList.remove('has-unread');
+          pill.innerText = '0';
+        }
+      } catch(e) {}
+    }
+
+    async function openEventsModal() {
+      document.getElementById('events-modal').style.display = 'flex';
+      await renderEventsTable();
+    }
+
+    function closeEventsModal() {
+      document.getElementById('events-modal').style.display = 'none';
+      loadHub();
+    }
+
+    async function renderEventsTable() {
+      const tbody = document.getElementById('events-table-body');
+      try {
+        const res = await fetch('/api/events?_t=' + Date.now());
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        tbody.innerHTML = '';
+
+        const evList = data.events || [];
+        if (evList.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:24px;">Инцидентов не зафиксировано. Все узлы работают штатно.</td></tr>';
+          return;
+        }
+
+        evList.forEach(ev => {
+          const tr = document.createElement('tr');
+          if (!ev.acknowledged) {
+            tr.className = 'ev-row-unread';
+          }
+
+          const resolvedTag = ev.resolved 
+            ? `<span class="ev-resolved-tag">В норме</span>` 
+            : `<span class="ev-active-tag">Активен</span>`;
+
+          const nodeName = ev.node_name || ev.node_id || 'Узел';
+          const nodeGroup = ev.group || 'Общие';
+          const msg = ev.message || '';
+          const timeStr = ev.timestamp || '';
+          const sev = ev.severity || 'WARNING';
+
+          tr.innerHTML = `
+            <td><code>${timeStr}</code></td>
+            <td><strong>${nodeName}</strong><br><span style="font-size:11px; color:var(--text-muted);">${nodeGroup}</span></td>
+            <td><span class="badge badge-${sev}">${sev}</span></td>
+            <td>${msg}</td>
+            <td>${resolvedTag}</td>
+            <td id="act-col-${ev.id}"></td>
+          `;
+
+          const actCol = tr.querySelector(`#act-col-${ev.id}`);
+          if (ev.acknowledged) {
+            actCol.innerHTML = `<span style="color:var(--text-muted); font-size:11px;">✓ Прочитано</span>`;
+          } else {
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-secondary';
+            btn.style.cssText = 'padding:3px 8px; font-size:11px;';
+            btn.innerText = '✓ Квитировать';
+            btn.onclick = () => ackSingleEvent(ev.id);
+            actCol.appendChild(btn);
+          }
+
+          tbody.appendChild(tr);
+        });
+      } catch(e) {
+        console.error("Ошибка загрузки событий:", e);
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--red); padding:16px;">Ошибка загрузки событий: ${e.message}</td></tr>`;
+      }
+    }
+
+    async function ackSingleEvent(id) {
+      try {
+        const res = await fetch('/api/events/ack', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: id, all: false })
+        });
+        if (res.ok) {
+          await renderEventsTable();
+          await checkEventsBadge();
+          loadHub();
+        }
+      } catch(e) { console.error("ACK error:", e); }
+    }
+
+    async function ackAllEvents() {
+      try {
+        const res = await fetch('/api/events/ack', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ all: true })
+        });
+        if (res.ok) {
+          await renderEventsTable();
+          await checkEventsBadge();
+          loadHub();
+        }
+      } catch(e) { console.error("ACK all error:", e); }
+    }
+
+    function switchTab(t) {
+      document.getElementById('tab-nodes').style.display = (t === 'nodes') ? 'block' : 'none';
+      document.getElementById('tab-tg').style.display = (t === 'tg') ? 'block' : 'none';
+      document.getElementById('tab-btn-nodes').className = 'tab-btn ' + ((t === 'nodes') ? 'active' : '');
+      document.getElementById('tab-btn-tg').className = 'tab-btn ' + ((t === 'tg') ? 'active' : '');
+    }
+
+    async function openConfigModal() {
+      const res = await fetch('/api/config');
+      appConfig = await res.json();
+      renderNodesTable();
+      
+      document.getElementById('hub-language').value = appConfig.language || 'ru';
+      const tg = appConfig.telegram || {};
+      document.getElementById('tg-enabled').checked = !!tg.enabled;
+      document.getElementById('tg-token').value = tg.bot_token || '';
+      document.getElementById('tg-chat-id').value = tg.chat_id || '';
+      document.getElementById('tg-on-crit').checked = tg.notify_on_crit !== false;
+      document.getElementById('tg-on-offline').checked = tg.notify_on_offline !== false;
+      document.getElementById('tg-on-warn').checked = !!tg.notify_on_warn;
+
+      document.getElementById('config-modal').style.display = 'flex';
+    }
+
+    function closeConfigModal() {
+      document.getElementById('config-modal').style.display = 'none';
+      resetForm();
+    }
+
+    function renderNodesTable() {
+      const tbody = document.getElementById('nodes-table-body');
+      tbody.innerHTML = '';
+      (appConfig.nodes || []).forEach((n, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${n.id}</strong></td>
+          <td>${n.name}</td>
+          <td>${n.group}</td>
+          <td><code>${n.host}</code></td>
+          <td>
+            <button class="btn btn-secondary" style="padding: 2px 6px; font-size: 11px;" onclick="editNode(${idx})">Правка</button>
+            <button class="btn btn-danger" style="padding: 2px 6px; font-size: 11px;" onclick="deleteNode(${idx})">Удалить</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function resetForm() {
+      document.getElementById('n-id').value = '';
+      document.getElementById('n-name').value = '';
+      document.getElementById('n-group').value = '';
+      document.getElementById('n-host').value = '';
+      document.getElementById('n-user').value = 'admin';
+      document.getElementById('n-pass').value = '';
+      document.getElementById('n-id').removeAttribute('disabled');
+    }
+
+    function editNode(idx) {
+      const n = appConfig.nodes[idx];
+      document.getElementById('n-id').value = n.id;
+      document.getElementById('n-id').setAttribute('disabled', 'true');
+      document.getElementById('n-name').value = n.name;
+      document.getElementById('n-group').value = n.group;
+      document.getElementById('n-host').value = n.host;
+      document.getElementById('n-user').value = n.auth_user || '';
+      document.getElementById('n-pass').value = n.auth_pass || '';
+    }
+
+    function saveNodeItem() {
+      const id = document.getElementById('n-id').value.trim();
+      const name = document.getElementById('n-name').value.trim();
+      const group = document.getElementById('n-group').value.trim() || 'Общие';
+      const host = document.getElementById('n-host').value.trim();
+      const user = document.getElementById('n-user').value.trim();
+      const pass = document.getElementById('n-pass').value;
+
+      if (!id || !name || !host) return alert("Заполните ID, Название и Host:Port!");
+
+      const idx = appConfig.nodes.findIndex(x => x.id === id);
+      const item = { id, name, group, host, auth_user: user, auth_pass: pass };
+      if (idx >= 0) appConfig.nodes[idx] = item;
+      else appConfig.nodes.push(item);
+
+      renderNodesTable();
+      resetForm();
+    }
+
+    function deleteNode(idx) {
+      if (confirm("Удалить этот компьютер из мониторинга?")) {
+        appConfig.nodes.splice(idx, 1);
+        renderNodesTable();
+      }
+    }
+
+    async function saveAllSettings() {
+      appConfig.language = document.getElementById('hub-language').value;
+      appConfig.telegram = {
+        enabled: document.getElementById('tg-enabled').checked,
+        bot_token: document.getElementById('tg-token').value.trim(),
+        chat_id: document.getElementById('tg-chat-id').value.trim(),
+        notify_on_crit: document.getElementById('tg-on-crit').checked,
+        notify_on_offline: document.getElementById('tg-on-offline').checked,
+        notify_on_warn: document.getElementById('tg-on-warn').checked
+      };
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(appConfig)
+        });
+        if (res.ok) {
+          alert("Настройки успешно сохранены!");
+          closeConfigModal();
+          loadHub();
+        } else alert("Ошибка сохранения на сервере");
+      } catch(e) { alert("Ошибка сети: " + e); }
+    }
+
+    async function testTelegram() {
+      try {
+        const res = await fetch('/api/test-telegram');
+        const data = await res.json();
+        if (res.ok) alert("✅ Тестовое сообщение успешно отправлено!");
+        else alert("❌ Ошибка отправки: " + (data.error || "Проверьте токен и Chat ID"));
+      } catch(e) { alert("Ошибка запроса: " + e); }
+    }
+
+    loadHub();
+    setInterval(loadHub, 5000);
+  </script>
+</body>
+</html>
+

@@ -2,7 +2,12 @@
 *.exe
 Output/
 
-# Local runtime data & logs
+# Local runtime state, locks & logs
+*.lock
+*.json
+*.log
 hub_config.json
 hub_events.json
-*.log
+history.json
+config.json
+nodes.json
