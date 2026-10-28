@@ -1,0 +1,280 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>CoreGuard — Буклет продукта</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 14mm 16mm;
+    }
+    :root {
+      --primary: #1e3a8a;
+      --accent: #2563eb;
+      --dark: #0f172a;
+      --muted: #475569;
+      --border: #cbd5e1;
+      --bg-card: #f8fafc;
+      --success: #16a34a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: var(--dark);
+      line-height: 1.45;
+      font-size: 10.5pt;
+      background: #fff;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2.5px solid var(--primary);
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .brand h1 {
+      font-size: 24pt;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: -0.5px;
+    }
+    .brand .tagline {
+      font-size: 10pt;
+      font-weight: 600;
+      color: var(--accent);
+      margin-top: 2px;
+    }
+    .badge-ent {
+      background: var(--primary);
+      color: #fff;
+      font-size: 8.5pt;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .lead-box {
+      background: var(--bg-card);
+      border-left: 4px solid var(--accent);
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      font-size: 10pt;
+      color: var(--muted);
+    }
+    h2 {
+      font-size: 12.5pt;
+      font-weight: 700;
+      color: var(--primary);
+      margin: 14px 0 8px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 4px;
+    }
+    .arch-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .arch-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .arch-card h3 {
+      font-size: 10.5pt;
+      font-weight: 700;
+      color: var(--dark);
+      margin-bottom: 4px;
+    }
+    .arch-card p {
+      font-size: 9pt;
+      color: var(--muted);
+    }
+    .features-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 14px;
+      margin-bottom: 14px;
+    }
+    .feature-item h4 {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: var(--dark);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .feature-item p {
+      font-size: 8.5pt;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      margin-bottom: 14px;
+      font-size: 8.5pt;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+      text-align: left;
+    }
+    th {
+      background: #e2e8f0;
+      color: var(--dark);
+      font-weight: 700;
+    }
+    td.center { text-align: center; }
+    .mark-yes { color: var(--success); font-weight: 800; font-size: 10.5pt; }
+    .mark-no { color: #94a3b8; font-size: 10.5pt; }
+    .specs-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 14px;
+      font-size: 8pt;
+    }
+    .specs-col strong {
+      display: block;
+      color: var(--dark);
+      margin-bottom: 2px;
+    }
+    .specs-col span { color: var(--muted); }
+    .footer {
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 8pt;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="brand">
+      <h1>CoreGuard</h1>
+      <div class="tagline">Комплексный мониторинг и защита ИТ-инфраструктуры</div>
+    </div>
+    <span class="badge-ent">Enterprise Ready</span>
+  </div>
+
+  <div class="lead-box">
+    <strong>CoreGuard</strong> — автономное высокопроизводительное решение для мониторинга аппаратного состояния серверов и парка ПК. Предотвращает отказ накопителей, перегрев компонентов и переполнение системных дисков до наступления сбоя.
+  </div>
+
+  <h2>Архитектура решения</h2>
+  <div class="arch-grid">
+    <div class="arch-card">
+      <h3>1. Локальный агент (CoreGuard.exe)</h3>
+      <p>Фоновый процесс без сторонних runtime-зависимостей. Опрашивает контроллеры SATA/NVMe, снимает температуру CPU/платы, проверяет диск C: и поднимает локальный UI (:8080).</p>
+    </div>
+    <div class="arch-card">
+      <h3>2. Центральный хаб (coreguard_hub.exe)</h3>
+      <p>Единый NOC-экран на порту 9090 для системных администраторов. Автоматически опрашивает агентов по сети, группирует узлы и агрегирует здоровье парка.</p>
+    </div>
+  </div>
+
+  <h2>Ключевой функционал</h2>
+  <div class="features-list">
+    <div class="feature-item">
+      <h4>Глубокий анализ SMART (NVMe / SATA)</h4>
+      <p>Прямой опрос контроллеров: счетчики износа (Wear/Spare), сбойные сектора (05/C5/C6), ошибки носителя и статус деградации в реальном времени.</p>
+    </div>
+    <div class="feature-item">
+      <h4>Защита от перегрева и переполнения</h4>
+      <p>Пороговые предупреждения по температуре ЦП и системной платы, а также учет свободного места на системном диске C:.</p>
+    </div>
+    <div class="feature-item">
+      <h4>Встроенный GUI-конфигуратор хаба</h4>
+      <p>Добавление, редактирование хостов и распределение по группам (Бухгалтерия, Склад, Серверы) прямо через браузер без ручной правки JSON.</p>
+    </div>
+    <div class="feature-item">
+      <h4>Защищенный REST API & Безопасность</h4>
+      <p>Сетевой интерфейс передачи телеметрии на порту 48123 с авторизацией (Basic Auth), фильтрацией IP-адресов и лицензированием Ed25519.</p>
+    </div>
+  </div>
+
+  <h2>Сравнение редакции</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Функциональные возможности</th>
+        <th style="width: 15%;" class="center">FREE</th>
+        <th style="width: 15%;" class="center">PRO</th>
+        <th style="width: 22%;" class="center">ENTERPRISE</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Диагностика SMART накопителей и локальный дашборд (:8080)</td>
+        <td class="center mark-yes">✓</td>
+        <td class="center mark-yes">✓</td>
+        <td class="center mark-yes">✓</td>
+      </tr>
+      <tr>
+        <td>Интервал опроса телеметрии</td>
+        <td class="center">Фикс. 120 мин</td>
+        <td class="center">От 1 мин</td>
+        <td class="center">От 1 мин</td>
+      </tr>
+      <tr>
+        <td>Кастомные пороги температур (ЦП, плата, диски)</td>
+        <td class="center mark-no">—</td>
+        <td class="center mark-yes">✓</td>
+        <td class="center mark-yes">✓</td>
+      </tr>
+      <tr>
+        <td>Удаленный сетевой API (:48123) с Basic Auth и IP Whitelist</td>
+        <td class="center mark-no">—</td>
+        <td class="center mark-yes">✓</td>
+        <td class="center mark-yes">✓</td>
+      </tr>
+      <tr>
+        <td>Центральный NOC Hub (:9090) с агрегацией узлов и GUI-редактором</td>
+        <td class="center mark-no">—</td>
+        <td class="center mark-no">—</td>
+        <td class="center mark-yes">✓</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="specs-row">
+    <div class="specs-col">
+      <strong>Платформа</strong>
+      <span>Windows 10 / 11 / Server</span>
+    </div>
+    <div class="specs-col">
+      <strong>Потребление ОЗУ</strong>
+      <span>Менее 25 МБ на узел</span>
+    </div>
+    <div class="specs-col">
+      <strong>Развертывание</strong>
+      <span>Автономный бинарник Go</span>
+    </div>
+    <div class="specs-col">
+      <strong>Лицензирование</strong>
+      <span>Ed25519 криптографическое</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>CoreGuard Infrastructure Security &copy; 2026</span>
+    <span>Готовые исполняемые файлы CoreGuard.exe и coreguard_hub.exe</span>
+  </div>
+
+</body>
+</html>

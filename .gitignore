@@ -1,37 +1,8 @@
-﻿*.lock
-config.json
-history.json
-keygen.go
+﻿# Binaries & Build artifacts
+*.exe
+Output/
 
-cmd/
-keygen/
-*.key
-
-
-# Binaries
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# CoreGuard local configs & licenses (не пушим боевые ключи и пароли)
-config.json
-nodes.json
-license.key
-private.key
-ed25519_private.pem
-
-# OS / Editor artifacts
-.vscode/
-.idea/
+# Local runtime data & logs
+hub_config.json
+hub_events.json
 *.log
-
-!CoreGuard.exe
-!coreguard_hub.exe
-
-
-config.json
-nodes.json
-*.key
-*.pem
-
