@@ -2,11 +2,11 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>CoreGuard — Буклет продукта</title>
+  <title>CoreGuard Enterprise v2.1.4 — Буклет продукта</title>
   <style>
     @page {
       size: A4 portrait;
-      margin: 14mm 16mm;
+      margin: 12mm 15mm;
     }
     :root {
       --primary: #1e3a8a;
@@ -16,13 +16,14 @@
       --border: #cbd5e1;
       --bg-card: #f8fafc;
       --success: #16a34a;
+      --danger: #dc2626;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       color: var(--dark);
       line-height: 1.45;
-      font-size: 10.5pt;
+      font-size: 10pt;
       background: #fff;
     }
     .header {
@@ -30,17 +31,18 @@
       justify-content: space-between;
       align-items: flex-start;
       border-bottom: 2.5px solid var(--primary);
-      padding-bottom: 12px;
-      margin-bottom: 16px;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
     }
     .brand h1 {
-      font-size: 24pt;
+      font-size: 22pt;
       font-weight: 800;
       color: var(--primary);
       letter-spacing: -0.5px;
+      line-height: 1.1;
     }
     .brand .tagline {
-      font-size: 10pt;
+      font-size: 9.5pt;
       font-weight: 600;
       color: var(--accent);
       margin-top: 2px;
@@ -48,7 +50,7 @@
     .badge-ent {
       background: var(--primary);
       color: #fff;
-      font-size: 8.5pt;
+      font-size: 8pt;
       font-weight: 700;
       padding: 4px 10px;
       border-radius: 4px;
@@ -58,105 +60,93 @@
     .lead-box {
       background: var(--bg-card);
       border-left: 4px solid var(--accent);
-      padding: 10px 14px;
-      margin-bottom: 16px;
-      font-size: 10pt;
+      padding: 9px 12px;
+      margin-bottom: 14px;
+      font-size: 9.5pt;
       color: var(--muted);
+      border-radius: 0 4px 4px 0;
     }
     h2 {
-      font-size: 12.5pt;
+      font-size: 11.5pt;
       font-weight: 700;
       color: var(--primary);
-      margin: 14px 0 8px 0;
+      margin: 12px 0 8px 0;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 3px;
       text-transform: uppercase;
       letter-spacing: 0.4px;
-      border-bottom: 1px solid #e2e8f0;
-      padding-bottom: 4px;
     }
-    .arch-grid {
+    .features-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 14px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
     }
-    .arch-card {
+    .feature-card {
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 10px 12px;
+      page-break-inside: avoid;
     }
-    .arch-card h3 {
-      font-size: 10.5pt;
+    .feature-title {
+      font-size: 10pt;
       font-weight: 700;
       color: var(--dark);
       margin-bottom: 4px;
-    }
-    .arch-card p {
-      font-size: 9pt;
-      color: var(--muted);
-    }
-    .features-list {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px 14px;
-      margin-bottom: 14px;
-    }
-    .feature-item h4 {
-      font-size: 9.5pt;
-      font-weight: 700;
-      color: var(--dark);
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
     }
-    .feature-item p {
-      font-size: 8.5pt;
+    .feature-desc {
+      font-size: 8.8pt;
       color: var(--muted);
-      margin-top: 2px;
+      line-height: 1.35;
+    }
+    .table-wrap {
+      margin: 10px 0 14px 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      page-break-inside: avoid;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 8px;
-      margin-bottom: 14px;
-      font-size: 8.5pt;
+      font-size: 8.8pt;
     }
     th, td {
-      border: 1px solid var(--border);
-      padding: 6px 8px;
+      padding: 7px 10px;
       text-align: left;
+      border-bottom: 1px solid var(--border);
     }
     th {
-      background: #e2e8f0;
-      color: var(--dark);
+      background: #f1f5f9;
       font-weight: 700;
+      color: var(--primary);
     }
-    td.center { text-align: center; }
-    .mark-yes { color: var(--success); font-weight: 800; font-size: 10.5pt; }
-    .mark-no { color: #94a3b8; font-size: 10.5pt; }
-    .specs-row {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
+    tr:last-child td { border-bottom: none; }
+    .check { color: var(--success); font-weight: bold; text-align: center; }
+    .cross { color: #94a3b8; text-align: center; }
+    .col-center { text-align: center; }
+
+    .arch-block {
+      background: #0f172a;
+      color: #e2e8f0;
       border-radius: 6px;
-      padding: 8px 12px;
-      margin-bottom: 14px;
+      padding: 10px 12px;
+      font-family: Consolas, monospace;
       font-size: 8pt;
+      line-height: 1.4;
+      margin-bottom: 14px;
+      page-break-inside: avoid;
     }
-    .specs-col strong {
-      display: block;
-      color: var(--dark);
-      margin-bottom: 2px;
-    }
-    .specs-col span { color: var(--muted); }
     .footer {
-      border-top: 1px solid var(--border);
-      padding-top: 8px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
       font-size: 8pt;
       color: var(--muted);
     }
@@ -166,114 +156,129 @@
 
   <div class="header">
     <div class="brand">
-      <h1>CoreGuard</h1>
-      <div class="tagline">Комплексный мониторинг и защита ИТ-инфраструктуры</div>
+      <h1>CoreGuard Enterprise</h1>
+      <div class="tagline">Аппаратный мониторинг накопителей и централизованный контроль парка ПК</div>
     </div>
-    <span class="badge-ent">Enterprise Ready</span>
+    <div style="text-align: right;">
+      <div class="badge-ent">Release v2.1.4</div>
+      <div style="font-size: 8pt; color: var(--muted); margin-top: 4px;">Архитектура: Windows x64</div>
+    </div>
   </div>
 
   <div class="lead-box">
-    <strong>CoreGuard</strong> — автономное высокопроизводительное решение для мониторинга аппаратного состояния серверов и парка ПК. Предотвращает отказ накопителей, перегрев компонентов и переполнение системных дисков до наступления сбоя.
+    <strong>CoreGuard</strong> — программный комплекс для непрерывного контроля физического состояния SSD и HDD накопителей, системных температур и аппаратной стабильности компьютеров. Построен на прямом обращении к контроллерам Windows API без громоздких внешних библиотек и ориентирован на корпоративную эксплуатацию.
   </div>
 
-  <h2>Архитектура решения</h2>
-  <div class="arch-grid">
-    <div class="arch-card">
-      <h3>1. Локальный агент (CoreGuard.exe)</h3>
-      <p>Фоновый процесс без сторонних runtime-зависимостей. Опрашивает контроллеры SATA/NVMe, снимает температуру CPU/платы, проверяет диск C: и поднимает локальный UI (:8080).</p>
+  <h2>Ключевые возможности версии v2.1.4</h2>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-title">⚙ Низкоуровневая телеметрия NVMe & SATA</div>
+      <div class="feature-desc">Прямой опрос накопителей через NVMe IOCTL и чтение сырых атрибутов SMART SATA (WMI/kernel). Мгновенное выявление износа ячеек памяти, переназначенных секторов и деградации интерфейса.</div>
     </div>
-    <div class="arch-card">
-      <h3>2. Центральный хаб (coreguard_hub.exe)</h3>
-      <p>Единый NOC-экран на порту 9090 для системных администраторов. Автоматически опрашивает агентов по сети, группирует узлы и агрегирует здоровье парка.</p>
+    <div class="feature-card">
+      <div class="feature-title">🛡 Автономная служба Windows Service</div>
+      <div class="feature-desc">Центральный сервер <code>CoreGuard Hub</code> функционирует в качестве фоновой системной службы (аккаунт SYSTEM). Не требует активного входа пользователя, автоматически перезапускается и работает без открытых консолей.</div>
     </div>
-  </div>
-
-  <h2>Ключевой функционал</h2>
-  <div class="features-list">
-    <div class="feature-item">
-      <h4>Глубокий анализ SMART (NVMe / SATA)</h4>
-      <p>Прямой опрос контроллеров: счетчики износа (Wear/Spare), сбойные сектора (05/C5/C6), ошибки носителя и статус деградации в реальном времени.</p>
+    <div class="feature-card">
+      <div class="feature-title">🖥 Двойной вид: Сетка карточек и Таблица</div>
+      <div class="feature-desc">Мгновенное переключение интерфейса дашборда: наглядные информативные карточки для экспресс-оценки или компактный табличный список для контроля десятков и сотен рабочих мест. Сохраняется в настройках.</div>
     </div>
-    <div class="feature-item">
-      <h4>Защита от перегрева и переполнения</h4>
-      <p>Пороговые предупреждения по температуре ЦП и системной платы, а также учет свободного места на системном диске C:.</p>
+    <div class="feature-card">
+      <div class="feature-title">🎯 Разделение «Сервер 24/7» и «Рабочая станция»</div>
+      <div class="feature-desc">Интеллектуальная фильтрация сетевых алертов: круглосуточные сервера строго контролируются на доступность, а рабочие станции сотрудников не засоряют дежурный чат тревогами при штатном выключении ПК.</div>
     </div>
-    <div class="feature-item">
-      <h4>Встроенный GUI-конфигуратор хаба</h4>
-      <p>Добавление, редактирование хостов и распределение по группам (Бухгалтерия, Склад, Серверы) прямо через браузер без ручной правки JSON.</p>
+    <div class="feature-card">
+      <div class="feature-title">📲 Оповещения в Telegram с журналом ACK</div>
+      <div class="feature-desc">Мгновенные push-уведомления дежурным администраторам при перегреве ЦП, критическом падении свободного места на диске C: или сбоях дисков. Встроенный веб-журнал с квитированием инцидентов.</div>
     </div>
-    <div class="feature-item">
-      <h4>Защищенный REST API & Безопасность</h4>
-      <p>Сетевой интерфейс передачи телеметрии на порту 48123 с авторизацией (Basic Auth), фильтрацией IP-адресов и лицензированием Ed25519.</p>
+    <div class="feature-card">
+      <div class="feature-title">🔒 100% On-Premise Безопасность</div>
+      <div class="feature-desc">Вся телеметрия и журналы передаются по локальной сети компании через REST API и хранятся внутри инфраструктуры. Полная автономность без внешних облачных зависимостей.</div>
     </div>
   </div>
 
-  <h2>Сравнение редакции</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Функциональные возможности</th>
-        <th style="width: 15%;" class="center">FREE</th>
-        <th style="width: 15%;" class="center">PRO</th>
-        <th style="width: 22%;" class="center">ENTERPRISE</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Диагностика SMART накопителей и локальный дашборд (:8080)</td>
-        <td class="center mark-yes">✓</td>
-        <td class="center mark-yes">✓</td>
-        <td class="center mark-yes">✓</td>
-      </tr>
-      <tr>
-        <td>Интервал опроса телеметрии</td>
-        <td class="center">Фикс. 120 мин</td>
-        <td class="center">От 1 мин</td>
-        <td class="center">От 1 мин</td>
-      </tr>
-      <tr>
-        <td>Кастомные пороги температур (ЦП, плата, диски)</td>
-        <td class="center mark-no">—</td>
-        <td class="center mark-yes">✓</td>
-        <td class="center mark-yes">✓</td>
-      </tr>
-      <tr>
-        <td>Удаленный сетевой API (:48123) с Basic Auth и IP Whitelist</td>
-        <td class="center mark-no">—</td>
-        <td class="center mark-yes">✓</td>
-        <td class="center mark-yes">✓</td>
-      </tr>
-      <tr>
-        <td>Центральный NOC Hub (:9090) с агрегацией узлов и GUI-редактором</td>
-        <td class="center mark-no">—</td>
-        <td class="center mark-no">—</td>
-        <td class="center mark-yes">✓</td>
-      </tr>
-    </tbody>
-  </table>
+  <h2>Сравнение редакций</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Функциональные возможности</th>
+          <th class="col-center" style="width: 75px;">FREE</th>
+          <th class="col-center" style="width: 75px;">PRO</th>
+          <th class="col-center" style="width: 105px;">ENTERPRISE</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Мониторинг SMART, температуры ЦП и свободного места</td>
+          <td class="check">✔</td>
+          <td class="check">✔</td>
+          <td class="check">✔</td>
+        </tr>
+        <tr>
+          <td>Прямой доступ к NVMe IOCTL / SATA WMI</td>
+          <td class="cross">—</td>
+          <td class="check">✔</td>
+          <td class="check">✔</td>
+        </tr>
+        <tr>
+          <td>Аварийное автокопирование при критическом износе диска</td>
+          <td class="cross">—</td>
+          <td class="check">✔</td>
+          <td class="check">✔</td>
+        </tr>
+        <tr>
+          <td>Работа демона в фоне и системном трее Windows</td>
+          <td class="cross">—</td>
+          <td class="check">✔</td>
+          <td class="check">✔</td>
+        </tr>
+        <tr>
+          <td>Центральный сервер мониторинга CoreGuard Hub (:9090)</td>
+          <td class="cross">—</td>
+          <td class="cross">—</td>
+          <td class="check">✔</td>
+        </tr>
+        <tr>
+          <td>Переключение режимов дашборда: Сетка / Компактный список</td>
+          <td class="cross">—</td>
+          <td class="cross">—</td>
+          <td class="check">✔ v2.1.4</td>
+        </tr>
+        <tr>
+          <td>Фоновый запуск Hub в качестве системной службы Windows</td>
+          <td class="cross">—</td>
+          <td class="cross">—</td>
+          <td class="check">✔ v2.1.4</td>
+        </tr>
+        <tr>
+          <td>Telegram-уведомления с разграничением Сервер / Рабочая станция</td>
+          <td class="cross">—</td>
+          <td class="cross">—</td>
+          <td class="check">✔ v2.1.4</td>
+        </tr>
+        <tr>
+          <td>Лимит подключенных компьютеров</td>
+          <td class="col-center">1 ПК</td>
+          <td class="col-center">До 3 ПК</td>
+          <td class="col-center"><strong>Неограниченно</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
-  <div class="specs-row">
-    <div class="specs-col">
-      <strong>Платформа</strong>
-      <span>Windows 10 / 11 / Server</span>
-    </div>
-    <div class="specs-col">
-      <strong>Потребление ОЗУ</strong>
-      <span>Менее 25 МБ на узел</span>
-    </div>
-    <div class="specs-col">
-      <strong>Развертывание</strong>
-      <span>Автономный бинарник Go</span>
-    </div>
-    <div class="specs-col">
-      <strong>Лицензирование</strong>
-      <span>Ed25519 криптографическое</span>
-    </div>
+  <h2>Схема архитектуры Hub-and-Spoke</h2>
+  <div class="arch-block">
+[ АРМ / Сервер 1 ] --- (REST API Telemetry) ---\
+[ АРМ / Сервер 2 ] --- (REST API Telemetry) ----+---> [ CoreGuard Hub (Служба Windows SYSTEM) ] ---> [ Telegram Bot ]
+[ АРМ / Сервер N ] --- (REST API Telemetry) ---/           |--> Web Dashboard (Порт :9090) [Сетка / Таблица]
+                                                           |--> Журнал инцидентов с квитированием (ACK)
+                                                           \--> JSON-конфигурация (hub_config.json)
   </div>
 
   <div class="footer">
-    <span>CoreGuard Infrastructure Security &copy; 2026</span>
-    <span>Готовые исполняемые файлы CoreGuard.exe и coreguard_hub.exe</span>
+    <div>Разработка и сопровождение: CoreGuard Solutions • Сборка: Release x64</div>
+    <div>Документ актуален для версии: <strong>v2.1.4</strong></div>
   </div>
 
 </body>
