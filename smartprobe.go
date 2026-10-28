@@ -2,9 +2,9 @@
 
 import (
     "encoding/binary"
+    "encoding/json"
     "fmt"
     "os/exec"
-    "strconv"
     "strings"
     "syscall"
     "unsafe"
@@ -23,32 +23,32 @@ const (
 
 // Структуры в точности по спецификации Windows DDK / smartmontools (os_win32.cpp)
 type STORAGE_PROPERTY_QUERY struct {
-    PropertyId uint32
-    QueryType  uint32
+    PropertyId           uint32
+    QueryType            uint32
     AdditionalParameters [1]byte
-    Padding [3]byte
+    Padding              [3]byte
 }
 
 type STORAGE_PROTOCOL_SPECIFIC_DATA struct {
-    ProtocolType         uint32
-    DataType             uint32
-    ProtocolDataRequestValue uint32
+    ProtocolType                uint32
+    DataType                    uint32
+    ProtocolDataRequestValue    uint32
     ProtocolDataRequestSubValue uint32
-    ProtocolDataOffset   uint32
-    ProtocolDataLength   uint32
-    FixedProtocolReturnData uint32
+    ProtocolDataOffset          uint32
+    ProtocolDataLength          uint32
+    FixedProtocolReturnData     uint32
     ProtocolDataRequestSubValue2 uint32
     ProtocolDataRequestSubValue3 uint32
-    Reserved             uint32
+    Reserved                    uint32
 }
 
+// 512-байтный буфер NVMe SMART Health Information Log (NVMe Spec 1.4, Section 5.14.1.2)
 type NVME_HEALTH_INFO_LOG struct {
     CriticalWarning         uint8
-    CompositeTempKelvin     uint16
+    Temperature             [2]uint8
     AvailableSpare          uint8
     AvailableSpareThreshold uint8
     PercentageUsed          uint8
-    EnduranceGroupCritical  uint8
     Reserved1               [26]uint8
     DataUnitsRead           [16]uint8
     DataUnitsWritten        [16]uint8
@@ -60,9 +60,9 @@ type NVME_HEALTH_INFO_LOG struct {
     UnsafeShutdowns         [16]uint8
     MediaErrors             [16]uint8
     NumErrorEntries         [16]uint8
-    WarningCompositeTemp    uint32
-    CriticalCompositeTemp   uint32
-    TempSensor              [8]uint16
+    WarningTempTime         uint32
+    CritTempTime            uint32
+    Reserved2               [380]uint8
 }
 
 type SmartData struct {
@@ -82,8 +82,7 @@ func openDriveHandle(driveIndex int) (windows.Handle, error) {
     if err != nil {
         return 0, err
     }
-
-    h, err := windows.CreateFile(
+    return windows.CreateFile(
         drivePath,
         windows.GENERIC_READ|windows.GENERIC_WRITE,
         windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
@@ -92,40 +91,84 @@ func openDriveHandle(driveIndex int) (windows.Handle, error) {
         0,
         0,
     )
-    if err == nil {
-        return h, nil
-    }
-
-    return windows.CreateFile(
-        drivePath,
-        0,
-        windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE,
-        nil,
-        windows.OPEN_EXISTING,
-        0,
-        0,
-    )
 }
 
-// Запрос часов наработки через аппаратный счетчик надежности Windows
-func queryPohFallback(driveIndex int) uint64 {
+// Аппаратный опрос SATA дисков через WMI MSStorageDriver_ATAPISmartData
+func querySataSmartFallback(driveIndex int) *SmartData {
     psScript := fmt.Sprintf(`
 $ErrorActionPreference = 'SilentlyContinue'
-$c = Get-PhysicalDisk | Where-Object DeviceId -eq %d | Get-StorageReliabilityCounter
-if ($c -and $c.PowerOnHours) { [uint64]$c.PowerOnHours } else { 0 }
-`, driveIndex)
+$poh = [uint64]0; $temp = 0; $realloc = [uint64]0; $pending = [uint64]0
+
+$drive = Get-CimInstance Win32_DiskDrive | Where-Object { $_.Index -eq %d }
+if ($drive) {
+    $smart = Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_ATAPISmartData | Where-Object {
+        $_.InstanceName -like "*$($drive.PNPDeviceID)*" -or ($drive.Model -and $_.InstanceName -like "*$($drive.Model)*")
+    } | Select-Object -First 1
+
+    if ($smart -and $smart.VendorSpecific) {
+        $b = $smart.VendorSpecific
+        for ($i = 2; $i -lt [Math]::Min($b.Length, 362); $i += 12) {
+            $id = $b[$i]
+            switch ($id) {
+                0x09 { $poh = [BitConverter]::ToUInt32($b, $i + 5) }
+                0x05 { $realloc = [BitConverter]::ToUInt32($b, $i + 5) }
+                0xC5 { $pending = [BitConverter]::ToUInt32($b, $i + 5) }
+                0xC2 { $temp = [int]$b[$i + 5] }
+                0xE7 { if ($temp -eq 0) { $temp = [int]$b[$i + 5] } }
+            }
+        }
+    }
+}
+
+if ($poh -eq 0 -or $temp -eq 0) {
+    $c = Get-PhysicalDisk | Where-Object DeviceId -eq %d | Get-StorageReliabilityCounter
+    if ($c) {
+        if ($poh -eq 0 -and $c.PowerOnHours) { $poh = [uint64]$c.PowerOnHours }
+        if ($temp -eq 0 -and $c.Temperature) { $temp = [int]$c.Temperature }
+    }
+}
+
+[PSCustomObject]@{
+    PowerOnHours = [uint64]$poh
+    Temperature  = [int]$temp
+    Reallocated  = [uint64]$realloc
+    Pending      = [uint64]$pending
+} | ConvertTo-Json -Compress
+`, driveIndex, driveIndex)
 
     cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", psScript)
     cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
     out, err := cmd.Output()
     if err != nil {
-        return 0
+        return &SmartData{
+            VendorProfile:  "SATA Hard Drive",
+            AvailableSpare: 100,
+        }
     }
-    trimmed := strings.TrimSpace(string(out))
-    if val, err := strconv.ParseUint(trimmed, 10, 64); err == nil && val > 0 {
-        return val
+
+    var res struct {
+        PowerOnHours uint64 `json:"PowerOnHours"`
+        Temperature  int    `json:"Temperature"`
+        Reallocated  uint64 `json:"Reallocated"`
+        Pending      uint64 `json:"Pending"`
     }
-    return 0
+
+    if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &res); err == nil {
+        return &SmartData{
+            VendorProfile:      "SATA Hard Drive",
+            IsNVMe:             false,
+            TemperatureC:       res.Temperature,
+            AvailableSpare:     100,
+            PowerOnHours:       res.PowerOnHours,
+            ReallocatedSectors: res.Reallocated,
+            PendingSectors:     res.Pending,
+        }
+    }
+
+    return &SmartData{
+        VendorProfile:  "SATA Hard Drive",
+        AvailableSpare: 100,
+    }
 }
 
 // Прямой опрос контроллера NVMe (реализация на базе smartmontools / LibreHardwareMonitor)
@@ -143,15 +186,11 @@ func ProbeNVMeDisk(hDrive windows.Handle, driveIndex int, model string) (*SmartD
     query.PropertyId = StorageDeviceProtocolSpecificProperty
     query.QueryType = PropertyStandardQuery
 
-    // 2. Заполняем STORAGE_PROTOCOL_SPECIFIC_DATA сразу за заголовком
+    // 2. Заполняем STORAGE_PROTOCOL_SPECIFIC_DATA
     protoData := (*STORAGE_PROTOCOL_SPECIFIC_DATA)(unsafe.Pointer(&buffer[queryHeaderSize]))
     protoData.ProtocolType = ProtocolTypeNvme
     protoData.DataType = NVMeDataTypeLogPage
     protoData.ProtocolDataRequestValue = NVME_LOG_PAGE_HEALTH_INFO
-    protoData.ProtocolDataRequestSubValue = 0
-
-    // КЛЮЧЕВОЙ МОМЕНТ SMARTMONTOOLS:
-    // Смещение полезных данных указывается ОТ НАЧАЛА STORAGE_PROTOCOL_SPECIFIC_DATA
     protoData.ProtocolDataOffset = protocolDataSize
     protoData.ProtocolDataLength = logPageSize
 
@@ -166,72 +205,57 @@ func ProbeNVMeDisk(hDrive windows.Handle, driveIndex int, model string) (*SmartD
         &bytesReturned,
         nil,
     )
+
     if err != nil {
-        return nil, fmt.Errorf("NVMe IOCTL error: %v", err)
+        return nil, fmt.Errorf("DeviceIoControl failed: %w", err)
     }
 
-    // Читаем дескриптор ответа ядра Windows
-    returnedProto := (*STORAGE_PROTOCOL_SPECIFIC_DATA)(unsafe.Pointer(&buffer[queryHeaderSize]))
-    dataOffset := queryHeaderSize + returnedProto.ProtocolDataOffset
-    if dataOffset+uint32(unsafe.Sizeof(NVME_HEALTH_INFO_LOG{})) > uint32(len(buffer)) {
-        return nil, fmt.Errorf("invalid return data offset: %d", dataOffset)
+    if bytesReturned < totalHeaderSize+uint32(unsafe.Sizeof(NVME_HEALTH_INFO_LOG{})) {
+        return nil, fmt.Errorf("incomplete SMART payload received")
     }
 
-    log := (*NVME_HEALTH_INFO_LOG)(unsafe.Pointer(&buffer[dataOffset]))
+    rawLog := (*NVME_HEALTH_INFO_LOG)(unsafe.Pointer(&buffer[totalHeaderSize]))
 
-    // Перевод температуры из Кельвинов в Цельсии
-    tempC := 0
-    if log.CompositeTempKelvin > 273 && log.CompositeTempKelvin < 393 {
-        tempC = int(log.CompositeTempKelvin) - 273
+    // Декодирование температуры по стандарту NVMe (Kelvin -> Celsius)
+    kelvin := binary.LittleEndian.Uint16(rawLog.Temperature[:])
+    var tempC int
+    if kelvin >= 273 && kelvin <= 373 {
+        tempC = int(kelvin) - 273
     }
 
-    // Часы наработки: 128-битное поле Little-Endian (берем младшие 64 бит)
-    poh := binary.LittleEndian.Uint64(log.PowerOnHours[0:8])
-    mediaErrors := binary.LittleEndian.Uint64(log.MediaErrors[0:8])
+    // 128-битные счетчики (младшие 64 бита)
+    poh := binary.LittleEndian.Uint64(rawLog.PowerOnHours[:8])
+    mediaErrors := binary.LittleEndian.Uint64(rawLog.MediaErrors[:8])
 
     return &SmartData{
-        VendorProfile:      "Intel NVMe SSD",
-        IsNVMe:             true,
-        TemperatureC:       tempC,
-        WearPercent:        int(log.PercentageUsed),
-        AvailableSpare:     int(log.AvailableSpare),
-        PowerOnHours:       poh,
-        MediaErrors:        mediaErrors,
-        ReallocatedSectors: 0,
-        PendingSectors:     0,
+        VendorProfile:  "NVMe Direct IOCTL",
+        IsNVMe:         true,
+        TemperatureC:   tempC,
+        WearPercent:    int(rawLog.PercentageUsed),
+        AvailableSpare: int(rawLog.AvailableSpare),
+        PowerOnHours:   poh,
+        MediaErrors:    mediaErrors,
     }, nil
 }
 
 func ProbePhysicalStorage(driveIndex int, model string) (*SmartData, error) {
-    // 1. Сначала пробуем получить данные надежного аппаратного счетчика ОС
-    fallbackHours := queryPohFallback(driveIndex)
-
     h, err := openDriveHandle(driveIndex)
-    if err != nil {
-        return &SmartData{
-            VendorProfile:  "Storage Drive",
-            AvailableSpare: 100,
-            PowerOnHours:   fallbackHours,
-        }, nil
-    }
-    defer windows.CloseHandle(h)
+    if err == nil {
+        defer windows.CloseHandle(h)
 
-    // 2. Прямой опрос контроллера NVMe
-    data, errNvme := ProbeNVMeDisk(h, driveIndex, model)
-    if errNvme == nil && data != nil {
-        if data.PowerOnHours == 0 && fallbackHours > 0 {
-            data.PowerOnHours = fallbackHours
+        // 1. Пробуем прямой опрос NVMe контроллера
+        data, errNvme := ProbeNVMeDisk(h, driveIndex, model)
+        if errNvme == nil && data != nil {
+            // Если NVMe контроллер не отдал часы, подтягиваем из WMI
+            if data.PowerOnHours == 0 {
+                if fb := querySataSmartFallback(driveIndex); fb != nil && fb.PowerOnHours > 0 {
+                    data.PowerOnHours = fb.PowerOnHours
+                }
+            }
+            return data, nil
         }
-        return data, nil
     }
 
-    // 3. Для SATA-дисков возвращаем подтвержденную аппаратную наработку
-    return &SmartData{
-        VendorProfile:      "SATA Hard Drive",
-        IsNVMe:             false,
-        AvailableSpare:     100,
-        PowerOnHours:       fallbackHours,
-        ReallocatedSectors: 0,
-        PendingSectors:     0,
-    }, nil
+    // 2. Для SATA HDD/SSD используем аппаратный WMI ATA SMART
+    return querySataSmartFallback(driveIndex), nil
 }
