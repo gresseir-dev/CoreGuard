@@ -1,0 +1,18 @@
+﻿# Исходный код Go
+*.go
+go.mod
+go.sum
+
+# Внутренние шаблоны исходников
+cmd/
+
+# Локальные данные, журналы и история
+history.json
+hub_events.json
+*.tmp
+*.log
+
+# Временные файлы сборщика
+Output/
+*.iss
+build_installer.ps1
