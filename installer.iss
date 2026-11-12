@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "CoreGuard Enterprise"
-#define MyAppVersion "2.2.3"
+#define MyAppVersion "2.2.4"
 #define MyAppPublisher "CoreGuard"
 #define MyAppExeName "CoreGuard.exe"
 #define MyHubExeName "coreguard_hub.exe"
@@ -56,6 +56,7 @@ Name: "{group}\Веб-панель CoreGuard Hub"; Filename: "http://localhost:9
 Name: "{autodesktop}\Веб-панель CoreGuard Hub"; Filename: "http://localhost:9090"; Tasks: desktopicon
 
 [Run]
+Filename: "schtasks.exe"; Parameters: "/Create /TN ""CoreGuardAgent"" /TR ""\""{app}\CoreGuard.exe\"""" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden
 ; 1. Принудительная зачистка зависших процессов перед регистрацией и стартом
 Filename: "{cmd}"; Parameters: "/c taskkill /f /im {#MyAppExeName} /im {#MyHubExeName} 2>nul || exit 0"; Flags: runhidden; StatusMsg: "Проверка и освобождение портов..."
 
@@ -72,6 +73,7 @@ Filename: "{app}\{#MyAppExeName}"; Flags: nowait postinstall; Description: "За
 Filename: "http://localhost:9090"; Flags: shellexec runmaximized postinstall; Description: "Открыть панель мониторинга Hub (http://localhost:9090)"
 
 [UninstallRun]
+Filename: "schtasks.exe"; Parameters: "/Delete /TN ""CoreGuardAgent"" /F"; Flags: runhidden
 ; 1. Синхронная остановка службы (net stop ожидает фактического завершения процесса)
 Filename: "{sys}\net.exe"; Parameters: "stop {#MyServiceName}"; Flags: runhidden
 
