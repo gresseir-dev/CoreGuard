@@ -1,8 +1,9 @@
 *.bak
 *.lock
+*.exe
+*.zip
 history.json
 hub_events.json
 brochure_temp.html
 publish.ps1
 Output/
-*.zip
