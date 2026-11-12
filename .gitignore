@@ -1,18 +1,8 @@
-﻿# Исходный код Go
-*.go
-go.mod
-go.sum
-
-# Внутренние шаблоны исходников
-cmd/
-
-# Локальные данные, журналы и история
+*.bak
+*.lock
 history.json
 hub_events.json
-*.tmp
-*.log
-
-# Временные файлы сборщика
+brochure_temp.html
+publish.ps1
 Output/
-*.iss
-build_installer.ps1
+*.zip

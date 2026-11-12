@@ -1,0 +1,18 @@
+{
+  "mode": "ENTERPRISE",
+  "license_key": "eyJ0aWVyIjoiRU5URVJQUklTRSIsImNsaWVudCI6ItCT0YDQtdC50YHQtdGAINCQ0LvQtdC60YHQtdC5INCQ0LvQtdC60YHQtdC10LLQuNGHIiwiZXhwaXJlc19hdCI6MCwibWluX2ludGVydmFsX3NlYyI6NjB9.K6P_ua3r1BTzEAbeQUldESJomZVGGFsQymAaO9mxgjzGe_spuUMpN47hizwpj1xEf_KH5b8XWHh9Ig6CvBeYDQ",
+  "poll_interval_min": 5,
+  "remote_access_enabled": true,
+  "remote_port": 48123,
+  "auth_user": "admin",
+  "auth_pass": "",
+  "ip_whitelist": "",
+  "backup_script": "",
+  "thresholds": {
+    "1": 50
+  },
+  "cpu_threshold": 70,
+  "mb_threshold": 50,
+  "space_threshold_pct": 30,
+  "language": "RU"
+}

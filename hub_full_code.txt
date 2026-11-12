@@ -1,0 +1,924 @@
+﻿==================== FILE: cmd\hub\main.go ====================
+package main
+
+import (
+    "fmt"
+    "log"
+    "net/http"
+    "os"
+    "path/filepath"
+
+    "golang.org/x/sys/windows/svc"
+)
+
+func main() {
+    // Рабочая папка строго рядом с exe, чтобы не писать в C:\Windows\System32
+    exePath, err := os.Executable()
+    if err == nil {
+        _ = os.Chdir(filepath.Dir(exePath))
+    }
+
+    if err := InitRegistry("hub_config.json"); err != nil {
+        log.Printf("InitRegistry warning: %v", err)
+    }
+
+    mux := http.NewServeMux()
+    mux.HandleFunc("/", handleDashboard)
+    mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusNoContent)
+    })
+    mux.HandleFunc("/api/nodes", handleGetNodes)
+    mux.HandleFunc("/api/events", handleGetEvents)
+    mux.HandleFunc("/api/config", handleConfig)
+    mux.HandleFunc("/api/report", handleReport)
+    mux.HandleFunc("/api/node/add", handleAddHost)
+    mux.HandleFunc("/api/node/delete", handleDeleteNode)
+
+    server := &http.Server{
+        Addr:    ":9090",
+        Handler: mux,
+    }
+
+    isService, err := svc.IsWindowsService()
+    if err != nil {
+        log.Fatalf("svc.IsWindowsService error: %v", err)
+    }
+
+    if isService {
+        // Запуск под управлением Windows SCM
+        if err := runAsWindowsService("CoreGuardHub", server); err != nil {
+            log.Fatalf("runAsWindowsService error: %v", err)
+        }
+    } else {
+        // Консольный запуск
+        fmt.Println("CoreGuard Central Hub запущен в консоли на http://localhost:9090")
+        if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            log.Fatalf("Server error: %v", err)
+        }
+    }
+}
+
+
+
+==================== FILE: cmd\hub\service.go ====================
+package main
+
+import (
+    "context"
+    "net/http"
+    "time"
+
+    "golang.org/x/sys/windows/svc"
+)
+
+type hubWindowsService struct {
+    server *http.Server
+}
+
+func (s *hubWindowsService) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (bool, uint32) {
+    const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown
+    // Немедленно уведомляем SCM, что служба стартует
+    changes <- svc.Status{State: svc.StartPending}
+
+    serverErrChan := make(chan error, 1)
+    go func() {
+        if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            serverErrChan <- err
+        }
+    }()
+
+    // Подтверждаем SCM, что служба успешно работает
+    changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
+
+    for {
+        select {
+        case <-serverErrChan:
+            changes <- svc.Status{State: svc.StopPending}
+            return false, 1
+        case req := <-r:
+            switch req.Cmd {
+            case svc.Interrogate:
+                changes <- req.CurrentStatus
+            case svc.Stop, svc.Shutdown:
+                changes <- svc.Status{State: svc.StopPending}
+                ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+                _ = s.server.Shutdown(ctx)
+                cancel()
+                return false, 0
+            }
+        }
+    }
+}
+
+func runAsWindowsService(name string, server *http.Server) error {
+    return svc.Run(name, &hubWindowsService{server: server})
+}
+
+
+
+==================== FILE: cmd\hub\nodes.go ====================
+package main
+
+import (
+    "encoding/json"
+    "errors"
+    "fmt"
+    "os"
+    "strings"
+    "sync"
+    "time"
+)
+
+type DiskTelemetry struct {
+    UID       string `json:"uid"`
+    Name      string `json:"name"`  // Для совместимости с фронтендом дашборда
+    Model     string `json:"model"`
+    Serial    string `json:"serial"`
+    BusType   string `json:"bus_type"`
+    IsUSB     bool   `json:"is_usb"`
+    Monitored bool   `json:"monitored"`
+    TempC     int    `json:"temp_c"`
+    Health    int    `json:"health"`
+}
+
+type Node struct {
+    ID       string          `json:"id"`
+    Hostname string          `json:"hostname"`
+    IP       string          `json:"ip"`
+    IsServer bool            `json:"is_server"`
+    Status   string          `json:"status"`
+    LastSeen time.Time       `json:"last_seen"`
+    Disks    []DiskTelemetry `json:"disks"`
+}
+
+type NodeRegistry struct {
+    sync.RWMutex
+    filePath string
+    Nodes    map[string]*Node `json:"nodes"`
+}
+
+var Registry = &NodeRegistry{
+    Nodes: make(map[string]*Node),
+}
+
+func InitRegistry(configPath string) error {
+    Registry.Lock()
+    defer Registry.Unlock()
+
+    Registry.filePath = configPath
+    if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
+        return Registry.saveUnsafe()
+    }
+
+    data, err := os.ReadFile(configPath)
+    if err != nil {
+        return fmt.Errorf("read error: %w", err)
+    }
+
+    var stored struct {
+        Nodes map[string]*Node `json:"nodes"`
+    }
+    if err := json.Unmarshal(data, &stored); err == nil && stored.Nodes != nil {
+        Registry.Nodes = stored.Nodes
+    }
+    return nil
+}
+
+func (r *NodeRegistry) saveUnsafe() error {
+    payload := struct {
+        Nodes map[string]*Node `json:"nodes"`
+    }{
+        Nodes: r.Nodes,
+    }
+
+    data, err := json.MarshalIndent(payload, "", "  ")
+    if err != nil {
+        return err
+    }
+
+    tmpFile := r.filePath + ".tmp"
+    if err := os.WriteFile(tmpFile, data, 0644); err != nil {
+        return err
+    }
+    return os.Rename(tmpFile, r.filePath)
+}
+
+func (r *NodeRegistry) DeleteNode(nodeID string) bool {
+    r.Lock()
+    defer r.Unlock()
+
+    targetID := ""
+    for id := range r.Nodes {
+        if strings.EqualFold(id, nodeID) {
+            targetID = id
+            break
+        }
+    }
+
+    if targetID == "" {
+        return false
+    }
+
+    delete(r.Nodes, targetID)
+    _ = r.saveUnsafe()
+    return true
+}
+
+func (r *NodeRegistry) AddOrUpdateNode(node *Node) error {
+    r.Lock()
+    defer r.Unlock()
+
+    r.Nodes[node.ID] = node
+    return r.saveUnsafe()
+}
+
+func (r *NodeRegistry) GetManagedNodesList() []*Node {
+    r.RLock()
+    defer r.RUnlock()
+
+    list := make([]*Node, 0, len(r.Nodes))
+    for _, n := range r.Nodes {
+        if n.Disks == nil {
+            n.Disks = []DiskTelemetry{}
+        }
+        // Гарантируем заполнение поля Name, если передана только модель
+        for i := range n.Disks {
+            if n.Disks[i].Name == "" {
+                if n.Disks[i].Model != "" {
+                    n.Disks[i].Name = n.Disks[i].Model
+                } else {
+                    n.Disks[i].Name = "Drive " + n.Disks[i].UID
+                }
+            }
+        }
+
+        if !n.LastSeen.IsZero() && time.Since(n.LastSeen) > 90*time.Second {
+            n.Status = "offline"
+        }
+        list = append(list, n)
+    }
+    return list
+}
+
+
+
+==================== FILE: cmd\hub\handlers.go ====================
+package main
+
+import (
+    "encoding/json"
+    "html/template"
+    "net/http"
+    "os"
+    "strings"
+    "time"
+)
+
+// handleDashboard отдаёт HTML-страницу
+func handleDashboard(w http.ResponseWriter, r *http.Request) {
+    if r.URL.Path != "/" {
+        http.NotFound(w, r)
+        return
+    }
+
+    tmplPath := "cmd/hub/dashboard.html"
+    if _, err := os.Stat(tmplPath); os.IsNotExist(err) {
+        tmplPath = "dashboard.html"
+    }
+
+    tmpl, err := template.ParseFiles(tmplPath)
+    if err != nil {
+        http.Error(w, "Ошибка загрузки шаблона: "+err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    nodes := Registry.GetManagedNodesList()
+    w.Header().Set("Content-Type", "text/html; charset=utf-8")
+    _ = tmpl.Execute(w, struct{ Nodes []*Node }{Nodes: nodes})
+}
+
+// handleGetNodes возвращает список узлов в JSON для loadHub()
+func handleGetNodes(w http.ResponseWriter, r *http.Request) {
+    nodes := Registry.GetManagedNodesList()
+    w.Header().Set("Content-Type", "application/json; charset=utf-8")
+    _ = json.NewEncoder(w).Encode(nodes)
+}
+
+// handleGetEvents возвращает список событий/алертов для checkEventsBadge()
+func handleGetEvents(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json; charset=utf-8")
+    w.Write([]byte(`[]`))
+}
+
+// handleConfig отдаёт конфигурацию с nodes в виде массива для renderNodesTable()
+func handleConfig(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json; charset=utf-8")
+
+    if r.Method == http.MethodGet {
+        nodesList := Registry.GetManagedNodesList()
+
+        configPayload := map[string]interface{}{
+            "port":  9090,
+            "nodes": nodesList, // Отдаем строгий JSON-массив [...]
+        }
+        _ = json.NewEncoder(w).Encode(configPayload)
+        return
+    }
+
+    if r.Method == http.MethodPost {
+        // Поддерживаем прием nodes как в виде массива, так и в виде объекта
+        var rawIncoming map[string]json.RawMessage
+        if err := json.NewDecoder(r.Body).Decode(&rawIncoming); err != nil {
+            http.Error(w, `{"error":"invalid json"}`, http.StatusBadRequest)
+            return
+        }
+
+        Registry.Lock()
+        if nodesRaw, ok := rawIncoming["nodes"]; ok {
+            // Пробуем распарсить как массив []Node
+            var arrNodes []*Node
+            if err := json.Unmarshal(nodesRaw, &arrNodes); err == nil {
+                for _, n := range arrNodes {
+                    if n.ID == "" {
+                        continue
+                    }
+                    if existing, found := Registry.Nodes[n.ID]; found {
+                        existing.Hostname = n.Hostname
+                        existing.IsServer = n.IsServer
+                    } else {
+                        n.Status = "unreached"
+                        Registry.Nodes[n.ID] = n
+                    }
+                }
+            } else {
+                // Запасной вариант: парсим как map[string]*Node
+                var mapNodes map[string]*Node
+                if err := json.Unmarshal(nodesRaw, &mapNodes); err == nil {
+                    for id, n := range mapNodes {
+                        if existing, found := Registry.Nodes[id]; found {
+                            existing.Hostname = n.Hostname
+                            existing.IsServer = n.IsServer
+                        } else {
+                            n.ID = id
+                            n.Status = "unreached"
+                            Registry.Nodes[id] = n
+                        }
+                    }
+                }
+            }
+        }
+        _ = Registry.saveUnsafe()
+        Registry.Unlock()
+
+        w.Write([]byte(`{"success":true,"status":"saved"}`))
+        return
+    }
+
+    http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+}
+
+// handleReport принимает телеметрию от агентов
+func handleReport(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+        return
+    }
+
+    var report struct {
+        NodeID   string          `json:"node_id"`
+        Hostname string          `json:"hostname"`
+        IsServer bool            `json:"is_server"`
+        Disks    []DiskTelemetry `json:"disks"`
+    }
+
+    if err := json.NewDecoder(r.Body).Decode(&report); err != nil {
+        http.Error(w, "Bad Request: "+err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    Registry.Lock()
+    defer Registry.Unlock()
+
+    node, exists := Registry.Nodes[report.NodeID]
+    if !exists {
+        for id, n := range Registry.Nodes {
+            if strings.EqualFold(n.Hostname, report.Hostname) || strings.EqualFold(id, report.Hostname) {
+                node = n
+                exists = true
+                delete(Registry.Nodes, id)
+                node.ID = report.NodeID
+                Registry.Nodes[report.NodeID] = node
+                break
+            }
+        }
+    }
+
+    if !exists {
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusOK)
+        w.Write([]byte(`{"status":"ignored_unregistered"}`))
+        return
+    }
+
+    node.LastSeen = time.Now()
+    node.Status = "online"
+    node.IP = r.RemoteAddr
+    if report.Hostname != "" {
+        node.Hostname = report.Hostname
+    }
+    if len(report.Disks) > 0 {
+        node.Disks = report.Disks
+    }
+
+    _ = Registry.saveUnsafe()
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte(`{"status":"accepted"}`))
+}
+
+// handleAddHost добавляет узел в белый список
+func handleAddHost(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+        return
+    }
+
+    var req struct {
+        NodeID   string `json:"node_id"`
+        Hostname string `json:"hostname"`
+        IsServer bool   `json:"is_server"`
+    }
+
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.NodeID) == "" {
+        http.Error(w, `{"error":"node_id is required"}`, http.StatusBadRequest)
+        return
+    }
+
+    nodeID := strings.TrimSpace(req.NodeID)
+    hostname := strings.TrimSpace(req.Hostname)
+    if hostname == "" {
+        hostname = nodeID
+    }
+
+    newNode := &Node{
+        ID:       nodeID,
+        Hostname: hostname,
+        IsServer: req.IsServer,
+        Status:   "unreached",
+        LastSeen: time.Time{},
+        Disks:    []DiskTelemetry{},
+    }
+
+    if err := Registry.AddOrUpdateNode(newNode); err != nil {
+        http.Error(w, `{"error":"failed to save"}`, http.StatusInternalServerError)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte(`{"success":true,"status":"added"}`))
+}
+
+// handleDeleteNode исключает узел из реестра
+func handleDeleteNode(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+        return
+    }
+
+    var req struct {
+        NodeID string `json:"node_id"`
+    }
+
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.NodeID) == "" {
+        http.Error(w, `{"error":"node_id is required"}`, http.StatusBadRequest)
+        return
+    }
+
+    deleted := Registry.DeleteNode(strings.TrimSpace(req.NodeID))
+    w.Header().Set("Content-Type", "application/json")
+    if !deleted {
+        w.WriteHeader(http.StatusNotFound)
+        w.Write([]byte(`{"success":false,"message":"node not found"}`))
+        return
+    }
+
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte(`{"success":true,"status":"deleted"}`))
+}
+
+
+
+==================== FILE: cmd\hub\dashboard.html ====================
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>CoreGuard Enterprise Central Hub</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --bg: #0b1120;
+      --panel: #1e293b;
+      --card-bg: #151e32;
+      --card-border: #334155;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --border: #26334d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 24px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+    .brand-title { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .brand-subtitle { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-secondary { background: var(--panel); border-color: var(--border); color: var(--text-main); }
+    .btn-secondary:hover { background: #2d3b55; }
+    .btn-danger { background: var(--danger); color: #fff; }
+
+    .nodes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 20px;
+    }
+    .node-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+    .node-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .node-name { font-size: 16px; font-weight: 600; color: #fff; }
+    .node-ip { font-size: 12px; color: var(--text-muted); font-family: monospace; }
+    .badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge-online { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-offline { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-unreached { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+
+    .disks-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .disk-card {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .disk-main {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .disk-model { font-size: 13px; font-weight: 500; color: #e2e8f0; }
+    .disk-bus {
+      font-size: 10px;
+      background: #1e293b;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--text-muted);
+      border: 1px solid #334155;
+    }
+    .disk-metrics {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+    .disk-temp { font-weight: 600; }
+    .temp-ok { color: #34d399; }
+    .temp-warn { color: #fbbf24; }
+    .temp-crit { color: #f87171; }
+
+    .health-bar-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .health-bar {
+      width: 70px;
+      height: 6px;
+      background: #334155;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .health-fill { height: 100%; border-radius: 3px; }
+
+    /* Модальные окна */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(11, 17, 32, 0.8);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .modal-box {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 650px;
+      max-width: 95vw;
+      padding: 20px;
+      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);
+    }
+    .form-control {
+      width: 100%;
+      background: #0b1120;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px;
+      color: #fff;
+      font-size: 13px;
+    }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--text-muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div>
+      <div class="brand-title">CoreGuard Enterprise Hub</div>
+      <div class="brand-subtitle">Централизованный мониторинг накопителей, телеметрии SMART и состояния узлов</div>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button type="button" class="btn btn-secondary" onclick="openConfigModal()">⚙️ Настройки и узлы</button>
+      <button type="button" class="btn btn-primary" onclick="openAddModal()">+ Добавить узел</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="nodesGrid" class="nodes-grid"></div>
+  </main>
+
+  <!-- Модальное окно конфигурации -->
+  <div id="configModal" class="modal-overlay">
+    <div class="modal-box">
+      <h3 style="margin-top:0;">Управление узлами и конфигурация</h3>
+      <div style="max-height: 350px; overflow-y: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID узла</th>
+              <th>Hostname</th>
+              <th>Сервер 24/7</th>
+              <th>Управление</th>
+            </tr>
+          </thead>
+          <tbody id="nodesTableBody"></tbody>
+        </table>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-top:16px;">
+        <button type="button" class="btn btn-primary" onclick="openAddModal()">+ Новый узел</button>
+        <button type="button" class="btn btn-secondary" onclick="closeConfigModal()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно добавления -->
+  <div id="addModal" class="modal-overlay">
+    <div class="modal-box" style="width:400px;">
+      <h3 style="margin-top:0;">Добавить узел</h3>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">Имя узла (ID):</label>
+        <input type="text" id="newNodeId" class="form-control" placeholder="например: SRV-STORAGE-01">
+      </div>
+      <div style="margin-bottom:16px;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px;">
+          <input type="checkbox" id="newNodeIsServer">
+          <span>Режим постоянной работы (Сервер 24/7)</span>
+        </label>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Отмена</button>
+        <button type="button" class="btn btn-primary" onclick="saveNodeItem()">Записать узел</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let nodes = [];
+
+    async function loadHub() {
+      try {
+        const res = await fetch('/api/nodes');
+        if (!res.ok) return;
+        nodes = await res.json();
+        renderDashboard(nodes || []);
+      } catch (e) {
+        console.error("loadHub error:", e);
+      }
+    }
+
+    function renderDashboard(nodesList) {
+      const grid = document.getElementById('nodesGrid');
+      if (!grid) return;
+
+      if (!nodesList || nodesList.length === 0) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 50px;">Нет добавленных узлов. Нажмите «+ Добавить узел».</div>';
+        return;
+      }
+
+      grid.innerHTML = nodesList.map(node => {
+        const status = node.status || 'unreached';
+        const badgeClass = status === 'online' ? 'badge-online' : (status === 'offline' ? 'badge-offline' : 'badge-unreached');
+        const statusText = status === 'online' ? 'Online' : (status === 'offline' ? 'Offline' : 'Ожидание');
+        const disks = node.disks || [];
+
+        let disksContent = '';
+        if (disks.length > 0) {
+          disksContent = disks.map(d => {
+            const temp = d.temp_c || 0;
+            const tempClass = temp >= 55 ? 'temp-crit' : (temp >= 45 ? 'temp-warn' : 'temp-ok');
+            const health = (d.health !== undefined && d.health !== null) ? d.health : 100;
+            const healthFillClass = health > 80 ? '#10b981' : (health > 50 ? '#f59e0b' : '#ef4444');
+
+            return `
+              <div class="disk-card">
+                <div class="disk-main">
+                  <span class="disk-model">${d.model || d.name || 'Диск'}</span>
+                  <span class="disk-bus">${d.bus_type || (d.is_usb ? 'USB' : 'NVMe/SATA')}</span>
+                </div>
+                <div class="disk-metrics">
+                  <span class="disk-temp ${tempClass}">${temp > 0 ? temp + ' °C' : 'N/A'}</span>
+                  <div class="health-bar-wrapper">
+                    <div class="health-bar">
+                      <div class="health-fill" style="width: ${health}%; background: ${healthFillClass};"></div>
+                    </div>
+                    <span>${health}%</span>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          disksContent = '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:10px;">Телеметрия накопителей ещё не поступила</div>';
+        }
+
+        return `
+          <div class="node-card">
+            <div class="node-header">
+              <div>
+                <div class="node-name">${node.hostname || node.id}</div>
+                <div class="node-ip">${node.ip || 'Ожидание подключения...'}</div>
+              </div>
+              <span class="badge ${badgeClass}">${statusText}</span>
+            </div>
+            <div class="disks-container">
+              ${disksContent}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function openConfigModal() {
+      try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        const list = Array.isArray(data.nodes) ? data.nodes : Object.values(data.nodes || {});
+        renderTable(list);
+        document.getElementById('configModal').style.display = 'flex';
+      } catch (e) {
+        alert("Ошибка загрузки настроек: " + e.message);
+      }
+    }
+
+    function closeConfigModal() {
+      document.getElementById('configModal').style.display = 'none';
+      loadHub();
+    }
+
+    function renderTable(list) {
+      const tbody = document.getElementById('nodesTableBody');
+      if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Список пуст</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(n => `
+        <tr>
+          <td><code>${n.id}</code></td>
+          <td>${n.hostname || n.id}</td>
+          <td>${n.is_server ? 'Да' : 'Нет'}</td>
+          <td>
+            <button type="button" class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deleteNode('${n.id}')">Удалить</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function deleteNode(id) {
+      if (!confirm('Удалить узел ' + id + '?')) return;
+      await fetch('/api/node/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_id: id })
+      });
+      openConfigModal();
+    }
+
+    function openAddModal() {
+      document.getElementById('newNodeId').value = '';
+      document.getElementById('newNodeIsServer').checked = false;
+      document.getElementById('addModal').style.display = 'flex';
+      document.getElementById('newNodeId').focus();
+    }
+
+    function closeAddModal() {
+      document.getElementById('addModal').style.display = 'none';
+    }
+
+    // Имя функции строго соответствует кнопке "Записать узел"
+    async function saveNodeItem() {
+      const input = document.getElementById('newNodeId');
+      const id = input ? input.value.trim() : '';
+      const isServer = document.getElementById('newNodeIsServer') ? document.getElementById('newNodeIsServer').checked : false;
+
+      if (!id) {
+        alert("Укажите имя или ID узла");
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/node/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ node_id: id, hostname: id, is_server: isServer })
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        closeAddModal();
+        if (document.getElementById('configModal').style.display === 'flex') {
+          openConfigModal();
+        }
+        loadHub();
+      } catch (e) {
+        alert("Ошибка добавления узла: " + e.message);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadHub();
+      setInterval(loadHub, 3000);
+    });
+  </script>
+</body>
+</html>
+
+
+

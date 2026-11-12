@@ -1,0 +1,7 @@
+﻿{
+    "port":  48123,
+    "host":  "127.0.0.1",
+    "name":  "Localhost",
+    "id":  "node-localhost",
+    "enabled":  true
+}

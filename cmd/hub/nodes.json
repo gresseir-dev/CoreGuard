@@ -1,0 +1,26 @@
+[
+  {
+    "id": "srv-db",
+    "name": "База 1С (Главный Сервер)",
+    "group": "Серверная",
+    "host": "192.168.1.10:48123",
+    "auth_user": "admin",
+    "auth_pass": "SecretPass123"
+  },
+  {
+    "id": "pc-cad-01",
+    "name": "Рабочая станция инженера",
+    "group": "Проектный отдел",
+    "host": "192.168.1.45:48123",
+    "auth_user": "admin",
+    "auth_pass": ""
+  },
+  {
+    "id": "pc-acc-lead",
+    "name": "Главный бухгалтер",
+    "group": "Бухгалтерия",
+    "host": "192.168.1.112:48123",
+    "auth_user": "admin",
+    "auth_pass": ""
+  }
+]

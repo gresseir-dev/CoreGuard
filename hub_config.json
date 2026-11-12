@@ -1,0 +1,22 @@
+{
+  "language": "ru",
+  "nodes": [
+    {
+      "id": "Localhost",
+      "name": "LocalHost",
+      "group": "Общие",
+      "host": "127.0.0.1:48123",
+      "auth_user": "admin",
+      "auth_pass": "",
+      "alert_on_offline": true
+    }
+  ],
+  "telegram": {
+    "enabled": false,
+    "bot_token": "",
+    "chat_id": "",
+    "notify_on_warn": false,
+    "notify_on_crit": true,
+    "notify_on_offline": true
+  }
+}
