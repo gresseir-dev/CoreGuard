@@ -229,22 +229,22 @@ func readNvmeHealth(h syscall.Handle, d *DriveHealth) error {
 	unitsWritten := binary.LittleEndian.Uint64(logData[48:56])
 	d.DataWrittenGB = float64(unitsWritten) * 512000.0 / (1024 * 1024 * 1024)
 
-	// Power On Hours (байты 112..127)
-	d.PowerOnHours = binary.LittleEndian.Uint64(logData[112:120])
+	    // Power Cycles (байты 112..127), Power On Hours (байты 128..143), Unsafe Shutdowns (байты 144..159), Media Errors (байты 160..175)
+    powerCycles := binary.LittleEndian.Uint64(logData[112:120])
+    d.PowerOnHours = binary.LittleEndian.Uint64(logData[128:136])
+    unsafeShutdowns := binary.LittleEndian.Uint64(logData[144:152])
+    mediaErrors := binary.LittleEndian.Uint64(logData[160:168])
 
-	// Media and Data Integrity Errors (байты 144..159)
-	mediaErrors := binary.LittleEndian.Uint64(logData[144:152])
-	
-
-	d.Attributes = []SmartAttribute{
-		{ID: 1, Name: "Critical Warning", Raw: uint64(critWarn), Critical: critWarn != 0},
-		{ID: 2, Name: "Composite Temperature (C)", Raw: uint64(d.TemperatureC)},
-		{ID: 3, Name: "Available Spare (%)", Raw: uint64(logData[3])},
-		{ID: 5, Name: "Percentage Used (%)", Raw: uint64(usedPct)},
-		{ID: 12, Name: "Power On Hours", Raw: d.PowerOnHours},
-		{ID: 13, Name: "Unsafe Shutdowns", Raw: binary.LittleEndian.Uint64(logData[128:136])},
-		{ID: 14, Name: "Media Integrity Errors", Raw: mediaErrors, Critical: false},
-	}
+    d.Attributes = []SmartAttribute{
+        {ID: 1, Name: "Critical Warning", Raw: uint64(critWarn), Critical: critWarn != 0},
+        {ID: 2, Name: "Composite Temperature (C)", Raw: uint64(d.TemperatureC)},
+        {ID: 3, Name: "Available Spare (%)", Raw: uint64(logData[3])},
+        {ID: 5, Name: "Percentage Used (%)", Raw: uint64(usedPct)},
+        {ID: 9, Name: "Power On Hours", Raw: d.PowerOnHours},
+        {ID: 12, Name: "Power Cycles", Raw: powerCycles},
+        {ID: 13, Name: "Unsafe Shutdowns", Raw: unsafeShutdowns},
+        {ID: 14, Name: "Media Integrity Errors", Raw: mediaErrors, Critical: false},
+    }
 	return nil
 }
 
