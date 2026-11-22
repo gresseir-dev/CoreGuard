@@ -249,7 +249,7 @@
       <div>
         <div class="metric-value" id="cpu-temp-val">0°C</div>
         <div class="metric-sub" style="margin-bottom: 8px;" data-i18n="lblCpu">Процессор</div>
-        <label style="display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--text-muted); cursor:pointer; background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.08);" title="Не учитывать этот диск в тревогах и центральном хабе"><input type="checkbox" ${isIgnored ? 'checked' : ''} onchange="toggleIgnoreDrive(${d.index}, this.checked)" style="accent-color:#64748b; cursor:pointer;"><span>${currentLang === 'RU' ? 'Игнорировать' : 'Ignore'}</span></label><div class="threshold-control">
+        <div class="threshold-control">
           <span data-i18n="lblThresh">Порог:</span> 
           <input id="thresh-input-cpu" class="threshold-input" type="number" min="20" max="100" value="70"> °C <button class="btn-action" style="padding: 2px 8px; margin-left: 4px;" onclick="saveProSettings()">OK</button>
         </div>
@@ -257,7 +257,7 @@
       <div>
         <div class="metric-value" id="mb-temp-val">0°C</div>
         <div class="metric-sub" style="margin-bottom: 8px;" data-i18n="lblMotherboard">Мат. плата</div>
-        <label style="display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--text-muted); cursor:pointer; background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.08);" title="Не учитывать этот диск в тревогах и центральном хабе"><input type="checkbox" ${isIgnored ? 'checked' : ''} onchange="toggleIgnoreDrive(${d.index}, this.checked)" style="accent-color:#64748b; cursor:pointer;"><span>${currentLang === 'RU' ? 'Игнорировать' : 'Ignore'}</span></label><div class="threshold-control">
+        <div class="threshold-control">
           <span data-i18n="lblThresh">Порог:</span> 
           <input id="thresh-input-mb" class="threshold-input" type="number" min="20" max="80" value="50"> °C <button class="btn-action" style="padding: 2px 8px; margin-left: 4px;" onclick="saveProSettings()">OK</button>
         </div>
@@ -695,7 +695,8 @@ async function refreshData() {
                 <span style="font-size:12px; color:var(--text-muted); font-weight:400;">(${d.interface})</span>
               </div>
               <div class="drive-badges">
-                <label style="display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--text-muted); cursor:pointer; background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.08);" title="Не учитывать этот диск в тревогах и центральном хабе"><input type="checkbox" ${isIgnored ? 'checked' : ''} onchange="toggleIgnoreDrive(${d.index}, this.checked)" style="accent-color:#64748b; cursor:pointer;"><span>${currentLang === 'RU' ? 'Игнорировать' : 'Ignore'}</span></label><div class="threshold-control">
+                <label style="display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--text-muted); cursor:pointer; background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.08);" title="Не учитывать этот диск в тревогах и центральном хабе"><input type="checkbox" ${isIgnored ? 'checked' : ''} onchange="toggleIgnoreDrive(${d.index}, this.checked)" style="accent-color:#64748b; cursor:pointer;"><span>${currentLang === 'RU' ? 'Игнорировать' : 'Ignore'}</span></label>
+                <div class="threshold-control">
                   ${t.lblThresh} 
                   <input id="thresh-input-${d.index}" class="threshold-input" type="number" value="${userCrit}" min="30" max="75"> °C
                   <button class="btn-action" style="padding: 2px 8px;" onclick="saveDriveThreshold(${d.index})">OK</button>
