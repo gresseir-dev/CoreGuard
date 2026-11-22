@@ -128,7 +128,13 @@
   <div class="msp-btn-group" id="msp-contact-buttons"></div>
 </div>
 
-<div class="card" style="margin-bottom: 24px; border-color: rgba(59, 130, 246, 0.4);">
+<div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+  <button type="button" id="btn-toggle-settings" onclick="toggleSettingsPanel()" style="background: rgba(30, 41, 59, 0.9); color: #e2e8f0; border: 1px solid rgba(59, 130, 246, 0.45); border-radius: 10px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.15s ease;">
+    <span>⚙️ Настройка</span>
+  </button>
+</div>
+
+<div id="settings-collapsible-panel" class="card" style="display: none; margin-bottom: 24px; border-color: rgba(59, 130, 246, 0.4);">
   <div class="card-title">
     <span data-i18n="proParamsTitle">⚙️ Параметры телеметрии: Удалённый доступ и Автоматизация</span>
     <span id="license-owner" style="font-size: 12px; color: #60a5fa; text-transform: none;">Лицензия не активирована</span>
@@ -812,6 +818,19 @@ async function refreshData() {
     });
 
   } catch(e) { console.error(e); }
+}
+
+function toggleSettingsPanel() {
+  const panel = document.getElementById('settings-collapsible-panel');
+  const btn = document.getElementById('btn-toggle-settings');
+  if (!panel || !btn) return;
+  const isHidden = panel.style.display === 'none' || panel.style.display === '';
+  panel.style.display = isHidden ? 'block' : 'none';
+  if (typeof currentLang !== 'undefined' && currentLang === 'ENG') {
+    btn.innerHTML = isHidden ? '<span>▲ Hide Settings</span>' : '<span>⚙️ Settings</span>';
+  } else {
+    btn.innerHTML = isHidden ? '<span>▲ Скрыть настройки</span>' : '<span>⚙️ Настройка</span>';
+  }
 }
 
 function renderZonedLineChart(svgId, values, labels, critThreshold, diskIdx, tagLabel) {
