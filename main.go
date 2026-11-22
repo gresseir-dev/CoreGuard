@@ -235,7 +235,8 @@ type Config struct {
     AuthPass            string      `json:"auth_pass"`
     IPWhitelist         string      `json:"ip_whitelist"`
     BackupScript        string      `json:"backup_script"`
-    Thresholds          map[int]int `json:"thresholds"`
+    Thresholds          map[int]int  `json:"thresholds"`
+	IgnoredDrives       map[int]bool `json:"ignored_drives"`
     CpuThreshold        int         `json:"cpu_threshold"`
     MbThreshold         int         `json:"mb_threshold"`
     SpaceThresholdPct   int         `json:"space_threshold_pct"`
@@ -435,6 +436,7 @@ func loadConfig() {
         IPWhitelist:         "",
         BackupScript:        "",
         Thresholds:          make(map[int]int),
+		IgnoredDrives:       make(map[int]bool),
         CpuThreshold:        70,
         MbThreshold:         50,
         SpaceThresholdPct:   10,
@@ -445,6 +447,7 @@ func loadConfig() {
     }
     if globalConfig.Thresholds == nil {
         globalConfig.Thresholds = make(map[int]int)
+	if globalConfig.IgnoredDrives == nil { globalConfig.IgnoredDrives = make(map[int]bool) }
     }
     if globalConfig.CpuThreshold < 20 || globalConfig.CpuThreshold > 100 {
         globalConfig.CpuThreshold = 70
@@ -787,13 +790,38 @@ func runCheckCycle() {
     hasCritical := sysHealth.HealthState == "CRITICAL"
     var driveMetrics []DriveHistoryMetric
 
-    for _, d := range report.Drives {
+        for i := range report.Drives {
+        d := &report.Drives[i]
         userCrit := 50
         if val, ok := globalConfig.Thresholds[d.Index]; ok && val > 0 {
             userCrit = val
         }
 
-        if d.HealthState == "CRITICAL" || d.Temperature >= userCrit {
+        if globalConfig.IgnoredDrives != nil && globalConfig.IgnoredDrives[d.Index] {
+            d.HealthState = "IGNORED"
+            d.Alerts = nil
+            continue
+        }
+
+        if d.ReallocatedSectors > 5 || d.PendingSectors > 0 || d.MediaErrors > 0 || d.Temperature >= userCrit {
+            d.HealthState = "CRITICAL"
+            if d.PendingSectors > 0 {
+                d.Alerts = append(d.Alerts, fmt.Sprintf("Нестабильные сектора (Pending): %d", d.PendingSectors))
+            }
+            if d.ReallocatedSectors > 5 {
+                d.Alerts = append(d.Alerts, fmt.Sprintf("Переназначенные сектора (Reallocated): %d", d.ReallocatedSectors))
+            }
+            if d.MediaErrors > 0 {
+                d.Alerts = append(d.Alerts, fmt.Sprintf("Ошибки носителя (Media Errors): %d", d.MediaErrors))
+            }
+            if d.Temperature >= userCrit {
+                d.Alerts = append(d.Alerts, fmt.Sprintf("Перегрев накопителя: %d°C (порог %d°C)", d.Temperature, userCrit))
+            }
+        } else if d.HealthState == "OK" && (d.ReallocatedSectors > 0 || d.WearPercent >= 90) {
+            d.HealthState = "WARNING"
+        }
+
+        if d.HealthState == "CRITICAL" {
             hasCritical = true
         }
         driveMetrics = append(driveMetrics, DriveHistoryMetric{
@@ -1032,8 +1060,19 @@ func buildAppRouter() *http.ServeMux {
                     globalConfig.Language = body.Language
                 }
                 if body.Thresholds != nil {
+                    if globalConfig.Thresholds == nil { globalConfig.Thresholds = make(map[int]int) }
                     for k, v := range body.Thresholds {
                         globalConfig.Thresholds[k] = v
+                    }
+                }
+                if body.IgnoredDrives != nil {
+                    if globalConfig.IgnoredDrives == nil { globalConfig.IgnoredDrives = make(map[int]bool) }
+                    for k, v := range body.IgnoredDrives {
+                        if v {
+                            globalConfig.IgnoredDrives[k] = true
+                        } else {
+                            delete(globalConfig.IgnoredDrives, k)
+                        }
                     }
                 }
 

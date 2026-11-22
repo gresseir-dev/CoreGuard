@@ -51,6 +51,7 @@ type NodeStatus struct {
     FreePct        float64    `json:"free_pct"`
     DrivesTotal    int        `json:"drives_total"`
     DrivesCrit     int        `json:"drives_crit"`
+	DriveAlerts    []string   `json:"drive_alerts,omitempty"`
     HasUnreadAlert bool       `json:"has_unread_alert"`
 }
 
@@ -414,9 +415,14 @@ func (h *HubManager) PollNode(node NodeConfig) *NodeStatus {
                 Overall     string  `json:"overall_state"`
             } `json:"system"`
             Drives []struct {
-                Index       int    `json:"index"`
-                TempC       int    `json:"temperature_c"`
-                HealthState string `json:"health_state"`
+                Index              int      `json:"index"`
+                Model              string   `json:"model"`
+                TempC              int      `json:"temperature_c"`
+                HealthState        string   `json:"health_state"`
+                PendingSectors     uint64   `json:"pending_sectors"`
+                ReallocatedSectors uint64   `json:"reallocated_sectors"`
+                MediaErrors        uint64   `json:"media_errors"`
+                Alerts             []string `json:"alerts"`
             } `json:"drives"`
         } `json:"report"`
     }
@@ -447,14 +453,27 @@ func (h *HubManager) PollNode(node NodeConfig) *NodeStatus {
 
     critCount := 0
     hasWarn := false
+    var driveAlerts []string
     for _, d := range rep.Drives {
-        if d.HealthState == "CRITICAL" {
+        if d.HealthState == "IGNORED" {
+            continue
+        }
+        isCritDrive := d.HealthState == "CRITICAL" || d.PendingSectors > 0 || d.ReallocatedSectors > 5 || d.MediaErrors > 0
+        if isCritDrive {
             critCount++
-        } else if d.HealthState == "WARNING" {
+            if len(d.Alerts) > 0 {
+                for _, a := range d.Alerts {
+                    driveAlerts = append(driveAlerts, fmt.Sprintf("%s: %s", d.Model, a))
+                }
+            } else {
+                driveAlerts = append(driveAlerts, fmt.Sprintf("%s: критическое состояние SMART (Pending:%d, Realloc:%d, Media:%d)", d.Model, d.PendingSectors, d.ReallocatedSectors, d.MediaErrors))
+            }
+        } else if d.HealthState == "WARNING" || d.ReallocatedSectors > 0 {
             hasWarn = true
         }
     }
     st.DrivesCrit = critCount
+    st.DriveAlerts = driveAlerts
 
     isAgentCrit := rep.System.CpuState == "CRITICAL" || rep.System.MbState == "CRITICAL" || rep.System.SpaceState == "CRITICAL" || rep.System.Overall == "CRITICAL"
     isAgentWarn := rep.System.CpuState == "WARNING" || rep.System.MbState == "WARNING" || rep.System.SpaceState == "WARNING" || rep.System.Overall == "WARNING"

@@ -249,7 +249,7 @@
       <div>
         <div class="metric-value" id="cpu-temp-val">0°C</div>
         <div class="metric-sub" style="margin-bottom: 8px;" data-i18n="lblCpu">Процессор</div>
-        <div class="threshold-control">
+        <label style="display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--text-muted); cursor:pointer; background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.08);" title="Не учитывать этот диск в тревогах и центральном хабе"><input type="checkbox" ${isIgnored ? 'checked' : ''} onchange="toggleIgnoreDrive(${d.index}, this.checked)" style="accent-color:#64748b; cursor:pointer;"><span>${currentLang === 'RU' ? 'Игнорировать' : 'Ignore'}</span></label><div class="threshold-control">
           <span data-i18n="lblThresh">Порог:</span> 
           <input id="thresh-input-cpu" class="threshold-input" type="number" min="20" max="100" value="70"> °C <button class="btn-action" style="padding: 2px 8px; margin-left: 4px;" onclick="saveProSettings()">OK</button>
         </div>
@@ -257,7 +257,7 @@
       <div>
         <div class="metric-value" id="mb-temp-val">0°C</div>
         <div class="metric-sub" style="margin-bottom: 8px;" data-i18n="lblMotherboard">Мат. плата</div>
-        <div class="threshold-control">
+        <label style="display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--text-muted); cursor:pointer; background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.08);" title="Не учитывать этот диск в тревогах и центральном хабе"><input type="checkbox" ${isIgnored ? 'checked' : ''} onchange="toggleIgnoreDrive(${d.index}, this.checked)" style="accent-color:#64748b; cursor:pointer;"><span>${currentLang === 'RU' ? 'Игнорировать' : 'Ignore'}</span></label><div class="threshold-control">
           <span data-i18n="lblThresh">Порог:</span> 
           <input id="thresh-input-mb" class="threshold-input" type="number" min="20" max="80" value="50"> °C <button class="btn-action" style="padding: 2px 8px; margin-left: 4px;" onclick="saveProSettings()">OK</button>
         </div>
@@ -409,6 +409,7 @@ const i18n = {
 
 let currentLang = 'RU';
 let driveThresholds = {};
+let ignoredDrives = {};
 let currentMode = 'FREE';
 
 function setLanguage(lang) {
@@ -496,6 +497,7 @@ async function refreshData() {
     const t = i18n[currentLang];
     
     driveThresholds = cfg.thresholds || {};
+    ignoredDrives = cfg.ignored_drives || {};
     currentMode = r.mode || 'FREE';
 
     const badge = document.getElementById('mode-badge');
@@ -650,6 +652,7 @@ async function refreshData() {
       dContainer.innerHTML = `<div style="color:var(--orange);">${t.msgPollingDrives}</div>`;
     } else {
       drives.forEach(d => {
+        const isIgnored = Boolean(ignoredDrives[d.index] || d.health_state === 'IGNORED');
         const userCrit = driveThresholds[d.index] || 50;
         const reallocated = d.reallocated_sectors || 0;
         const pending = d.pending_sectors || 0;
@@ -658,7 +661,11 @@ async function refreshData() {
         let smartIcon = '🛡️';
         let smartText = t.stateOk;
 
-        if (d.health_state === 'CRITICAL' || reallocated > 5 || pending > 0 || d.temperature_c >= userCrit) {
+        if (isIgnored) {
+          smartClass = '';
+          smartIcon = '🔇';
+          smartText = currentLang === 'RU' ? 'Игнорируется' : 'Ignored';
+        } else if (d.health_state === 'CRITICAL' || reallocated > 5 || pending > 0 || d.temperature_c >= userCrit) {
           smartClass = 'smart-crit';
           smartIcon = '⚠️';
           smartText = t.stateCrit;
@@ -668,10 +675,10 @@ async function refreshData() {
           smartText = t.stateWarn;
         }
 
-        const isCrit = d.temperature_c >= userCrit || d.health_state === 'CRITICAL';
-        const isWarn = d.temperature_c >= (userCrit - 5) || d.health_state === 'WARNING';
-        const chipClass = isCrit ? 'chip-crit' : (isWarn ? 'chip-warn' : 'chip-ok');
-        const stateText = isCrit ? t.stateCrit : (isWarn ? t.stateWarn : t.stateOk);
+        const isCrit = !isIgnored && (d.temperature_c >= userCrit || d.health_state === 'CRITICAL' || reallocated > 5 || pending > 0);
+        const isWarn = !isIgnored && (d.temperature_c >= (userCrit - 5) || d.health_state === 'WARNING' || reallocated > 0 || d.wear_percent >= 90);
+        const chipClass = isIgnored ? '' : (isCrit ? 'chip-crit' : (isWarn ? 'chip-warn' : 'chip-ok'));
+        const stateText = isIgnored ? (currentLang === 'RU' ? 'ИГНОРИРУЕТСЯ' : 'IGNORED') : (isCrit ? t.stateCrit : (isWarn ? t.stateWarn : t.stateOk));
 
         const hours = d.power_on_hours || 0;
         const days = Math.floor(hours / 24);
@@ -680,7 +687,7 @@ async function refreshData() {
         const reallocColor = reallocated > 5 ? 'var(--red)' : (reallocated > 0 ? 'var(--orange)' : 'var(--text)');
 
         dContainer.innerHTML += `
-          <div class="drive-item">
+          <div class="drive-item" style="${isIgnored ? 'opacity:0.55; border-style:dashed;' : ''}">
             <div class="drive-head">
               <div class="drive-name">
                 <span>💾 PhysicalDrive${d.index}:</span> 
@@ -688,7 +695,7 @@ async function refreshData() {
                 <span style="font-size:12px; color:var(--text-muted); font-weight:400;">(${d.interface})</span>
               </div>
               <div class="drive-badges">
-                <div class="threshold-control">
+                <label style="display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--text-muted); cursor:pointer; background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.08);" title="Не учитывать этот диск в тревогах и центральном хабе"><input type="checkbox" ${isIgnored ? 'checked' : ''} onchange="toggleIgnoreDrive(${d.index}, this.checked)" style="accent-color:#64748b; cursor:pointer;"><span>${currentLang === 'RU' ? 'Игнорировать' : 'Ignore'}</span></label><div class="threshold-control">
                   ${t.lblThresh} 
                   <input id="thresh-input-${d.index}" class="threshold-input" type="number" value="${userCrit}" min="30" max="75"> °C
                   <button class="btn-action" style="padding: 2px 8px;" onclick="saveDriveThreshold(${d.index})">OK</button>
