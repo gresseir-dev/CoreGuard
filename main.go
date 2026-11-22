@@ -20,6 +20,7 @@ import (
     "runtime"
     "strings"
     "sync"
+	"sync/atomic"
     "syscall"
     "time"
     "unsafe"
@@ -241,6 +242,8 @@ type Config struct {
     MbThreshold         int         `json:"mb_threshold"`
     SpaceThresholdPct   int         `json:"space_threshold_pct"`
     Language            string      `json:"language"`
+    PopupAlertEnabled   *bool       `json:"popup_alert_enabled"`
+    PopupRepeatMin      int         `json:"popup_repeat_min"`
 }
 
 type DriveInfo struct {
@@ -293,6 +296,8 @@ var (
     activeLicense  LicensePayload
     tickerResetCh  = make(chan time.Duration, 1)
     remoteServer   *http.Server
+    popupActive    atomic.Int32
+    lastPopupTime  time.Time
     remoteMu       sync.Mutex
     stateMu        sync.RWMutex
 )
@@ -873,34 +878,157 @@ func runCheckCycle() {
     copyToUTF16Fixed(nid.SzTip[:], tipText)
     procShellNotifyIconW.Call(NIM_MODIFY, uintptr(unsafe.Pointer(&nid)))
 
+    var critReasons []string
     if sysHealth.CpuState == "CRITICAL" {
-        tTitle := "Внимание! Перегрев процессора!"
-        tMsg := fmt.Sprintf("Температура ЦП достигла %d°C (выше порога %d°C)!", sysHealth.CpuTemp, globalConfig.CpuThreshold)
-        if !isRu {
-            tTitle = "Alert! CPU Overheating!"
-            tMsg = fmt.Sprintf("CPU temperature reached %d°C (threshold: %d°C)!", sysHealth.CpuTemp, globalConfig.CpuThreshold)
+        if isRu {
+            critReasons = append(critReasons, fmt.Sprintf("• Перегрев процессора: %d°C (порог %d°C)", sysHealth.CpuTemp, globalConfig.CpuThreshold))
+        } else {
+            critReasons = append(critReasons, fmt.Sprintf("• CPU Overheating: %d°C (threshold %d°C)", sysHealth.CpuTemp, globalConfig.CpuThreshold))
         }
-        showTrayNotification(tTitle, tMsg, true)
-    } else if sysHealth.MbState == "CRITICAL" {
-        tTitle := "Внимание! Перегрев мат. платы!"
-        tMsg := fmt.Sprintf("Температура платы достигла %d°C (выше порога %d°C)!", sysHealth.MbTemp, globalConfig.MbThreshold)
-        if !isRu {
-            tTitle = "Alert! Motherboard Overheating!"
-            tMsg = fmt.Sprintf("Motherboard temperature reached %d°C (threshold: %d°C)!", sysHealth.MbTemp, globalConfig.MbThreshold)
+    }
+    if sysHealth.MbState == "CRITICAL" {
+        if isRu {
+            critReasons = append(critReasons, fmt.Sprintf("• Перегрев материнской платы: %d°C (порог %d°C)", sysHealth.MbTemp, globalConfig.MbThreshold))
+        } else {
+            critReasons = append(critReasons, fmt.Sprintf("• Motherboard Overheating: %d°C (threshold %d°C)", sysHealth.MbTemp, globalConfig.MbThreshold))
         }
-        showTrayNotification(tTitle, tMsg, true)
-    } else if sysHealth.SpaceState == "CRITICAL" {
-        tTitle := "Внимание! Диск C: переполнен!"
-        tMsg := fmt.Sprintf("Свободно всего %.1f ГБ (%.1f%%, ниже порога %d%%)!", sysHealth.FreeGB, sysHealth.FreePercent, globalConfig.SpaceThresholdPct)
-        if !isRu {
-            tTitle = "Alert! Drive C: Out of Space!"
-            tMsg = fmt.Sprintf("Only %.1f GB (%.1f%%, below threshold %d%%) remaining!", sysHealth.FreeGB, sysHealth.FreePercent, globalConfig.SpaceThresholdPct)
+    }
+    if sysHealth.SpaceState == "CRITICAL" {
+        if isRu {
+            critReasons = append(critReasons, fmt.Sprintf("• Мало места на диске C:: свободно %.1f ГБ (%.1f%%)", sysHealth.FreeGB, sysHealth.FreePercent))
+        } else {
+            critReasons = append(critReasons, fmt.Sprintf("• Low disk space on C:: %.1f GB (%.1f%%) left", sysHealth.FreeGB, sysHealth.FreePercent))
         }
-        showTrayNotification(tTitle, tMsg, true)
+    }
+    for _, d := range report.Drives {
+        if d.HealthState == "CRITICAL" {
+            if len(d.Alerts) > 0 {
+                for _, a := range d.Alerts {
+                    critReasons = append(critReasons, fmt.Sprintf("• Диск %s: %s", d.Model, a))
+                }
+            } else {
+                if isRu {
+                    critReasons = append(critReasons, fmt.Sprintf("• Критический сбой накопителя %s (SMART)", d.Model))
+                } else {
+                    critReasons = append(critReasons, fmt.Sprintf("• Critical drive failure on %s (SMART)", d.Model))
+                }
+            }
+        }
+    }
+
+    if len(critReasons) > 0 {
+        tTitle := "CoreGuard — ВНИМАНИЕ! Критический сбой оборудования!"
+        if !isRu {
+            tTitle = "CoreGuard — ALERT! Critical Hardware Issue!"
+        }
+        showTrayNotification(tTitle, strings.Join(critReasons, "\n"), true)
+
+        popupEnabled := true
+        if globalConfig.PopupAlertEnabled != nil {
+            popupEnabled = *globalConfig.PopupAlertEnabled
+        }
+        repeatMin := globalConfig.PopupRepeatMin
+        if repeatMin <= 0 {
+            repeatMin = 60
+        }
+        if popupEnabled && time.Since(lastPopupTime) >= time.Duration(repeatMin)*time.Minute {
+            lastPopupTime = time.Now()
+            go showBlockingAlertPopup(tTitle, critReasons, globalConfig.MspBranding, isRu)
+        }
     }
 
     if hasCritical && globalConfig.BackupScript != "" {
         triggerEmergencyBackup(globalConfig.BackupScript)
+    }
+}
+
+func showBlockingAlertPopup(title string, reasons []string, brand MspBranding, isRu bool) {
+    if !popupActive.CompareAndSwap(0, 1) {
+        return
+    }
+    defer popupActive.Store(0)
+
+    host, _ := os.Hostname()
+    var sb strings.Builder
+    if isRu {
+        sb.WriteString(fmt.Sprintf("На компьютере [%s] обнаружена критическая неисправность:\n\n", host))
+        sb.WriteString(strings.Join(reasons, "\n"))
+        sb.WriteString("\n\n----------------------------------------\n")
+        sb.WriteString("Срочно свяжитесь с IT-специалистом:\n")
+        hasContacts := false
+        if strings.TrimSpace(brand.CompanyName) != "" {
+            sb.WriteString("• Специалист / Отдел: " + brand.CompanyName + "\n")
+            hasContacts = true
+        }
+        if strings.TrimSpace(brand.SupportPhone) != "" {
+            sb.WriteString("• Телефон: " + brand.SupportPhone + "\n")
+            hasContacts = true
+        }
+        if strings.TrimSpace(brand.SupportTelegram) != "" {
+            sb.WriteString("• Telegram / Мессенджер: " + brand.SupportTelegram + "\n")
+            hasContacts = true
+        }
+        if strings.TrimSpace(brand.SupportEmail) != "" {
+            sb.WriteString("• Email: " + brand.SupportEmail + "\n")
+            hasContacts = true
+        }
+        if !hasContacts {
+            sb.WriteString("• Обратитесь к вашему системному администратору.\n")
+        }
+        sb.WriteString("\nОткрыть окно диагностики CoreGuard для просмотра деталей?")
+    } else {
+        sb.WriteString(fmt.Sprintf("Critical hardware/system issue detected on [%s]:\n\n", host))
+        sb.WriteString(strings.Join(reasons, "\n"))
+        sb.WriteString("\n\n----------------------------------------\n")
+        sb.WriteString("Please contact IT Support immediately:\n")
+        hasContacts := false
+        if strings.TrimSpace(brand.CompanyName) != "" {
+            sb.WriteString("• IT Support: " + brand.CompanyName + "\n")
+            hasContacts = true
+        }
+        if strings.TrimSpace(brand.SupportPhone) != "" {
+            sb.WriteString("• Phone: " + brand.SupportPhone + "\n")
+            hasContacts = true
+        }
+        if strings.TrimSpace(brand.SupportTelegram) != "" {
+            sb.WriteString("• Telegram: " + brand.SupportTelegram + "\n")
+            hasContacts = true
+        }
+        if strings.TrimSpace(brand.SupportEmail) != "" {
+            sb.WriteString("• Email: " + brand.SupportEmail + "\n")
+            hasContacts = true
+        }
+        if !hasContacts {
+            sb.WriteString("• Contact your system administrator.\n")
+        }
+        sb.WriteString("\nOpen CoreGuard diagnostics dashboard now?")
+    }
+
+    tPtr, _ := windows.UTF16PtrFromString(title)
+    mPtr, _ := windows.UTF16PtrFromString(sb.String())
+
+    const (
+        MB_YESNO         = 0x00000004
+        MB_ICONERROR     = 0x00000010
+        MB_SYSTEMMODAL   = 0x00001000
+        MB_SETFOREGROUND = 0x00010000
+        IDYES            = 6
+    )
+
+    ret, _, _ := procMessageBoxW.Call(
+        0,
+        uintptr(unsafe.Pointer(mPtr)),
+        uintptr(unsafe.Pointer(tPtr)),
+        MB_YESNO|MB_ICONERROR|MB_SYSTEMMODAL|MB_SETFOREGROUND,
+    )
+
+    if ret == IDYES {
+        port := globalConfig.RemotePort
+        if port <= 0 {
+            port = 48123
+        }
+        url := fmt.Sprintf("http://127.0.0.1:%d", port)
+        _ = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
     }
 }
 
@@ -1059,6 +1187,14 @@ func buildAppRouter() *http.ServeMux {
                 if body.Language == "ENG" || body.Language == "RU" {
                     globalConfig.Language = body.Language
                 }
+                if body.PopupAlertEnabled != nil {
+                    val := *body.PopupAlertEnabled
+                    globalConfig.PopupAlertEnabled = &val
+                }
+                if body.PopupRepeatMin >= 1 && body.PopupRepeatMin <= 1440 {
+                    globalConfig.PopupRepeatMin = body.PopupRepeatMin
+                }
+                globalConfig.MspBranding = body.MspBranding
                 if body.Thresholds != nil {
                     if globalConfig.Thresholds == nil { globalConfig.Thresholds = make(map[int]int) }
                     for k, v := range body.Thresholds {

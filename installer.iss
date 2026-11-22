@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "CoreGuard Enterprise"
-#define MyAppVersion "2.3.7"
+#define MyAppVersion "2.3.9"
 #define MyAppPublisher "CoreGuard"
 #define MyAppExeName "CoreGuard.exe"; Components: agent
 #define MyHubExeName "coreguard_hub.exe"; Components: hub
@@ -25,7 +25,7 @@ SolidCompression=yes
 ; Обязательный запрос прав администратора (UAC)
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
 RestartApplications=no
 
@@ -84,15 +84,15 @@ Filename: "{app}\{#MyAppExeName}"; Flags: nowait postinstall; Description: "За
 Filename: "http://localhost:9090"; Flags: shellexec runmaximized postinstall; Description: "Открыть панель мониторинга Hub (http://localhost:9090)"; Components: hub
 
 [UninstallRun]
-Filename: "schtasks.exe"; Parameters: "/Delete /TN ""CoreGuardAgent"" /F"; Flags: runhidden; Components: agent
+Filename: "schtasks.exe"; Parameters: "/Delete /TN ""CoreGuardAgent"" /F"; Flags: runhidden; Components: agent; RunOnceId: "cg_uninst_1"
 ; 1. Синхронная остановка службы (net stop ожидает фактического завершения процесса)
-Filename: "{sys}\net.exe"; Parameters: "stop {#MyServiceName}"; Flags: runhidden
+Filename: "{sys}\net.exe"; Parameters: "stop {#MyServiceName}"; Flags: runhidden; RunOnceId: "cg_uninst_2"
 
 ; 2. Принудительное завершение процессов, если они не успели выгрузиться
-Filename: "{cmd}"; Parameters: "/c taskkill /f /im {#MyHubExeName} /im {#MyAppExeName} 2>nul || exit 0"; Flags: runhidden
+Filename: "{cmd}"; Parameters: "/c taskkill /f /im {#MyHubExeName} /im {#MyAppExeName} 2>nul || exit 0"; Flags: runhidden; RunOnceId: "cg_uninst_3"
 
 ; 3. Удаление службы из системного реестра SCM
-Filename: "{sys}\sc.exe"; Parameters: "delete {#MyServiceName}"; Flags: runhidden
+Filename: "{sys}\sc.exe"; Parameters: "delete {#MyServiceName}"; Flags: runhidden; RunOnceId: "cg_uninst_4"
 [UninstallDelete]
 Type: files; Name: "{app}\hub_events.json"
 Type: files; Name: "{app}\history.json"

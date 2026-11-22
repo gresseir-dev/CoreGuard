@@ -19,6 +19,7 @@
   "thresholds": {
     "1": 50
   },
+  "ignored_drives": {},
   "cpu_threshold": 70,
   "mb_threshold": 50,
   "space_threshold_pct": 30,

@@ -452,6 +452,13 @@ async function saveProSettings() {
     auth_pass: document.getElementById('cfg-auth-pass').value.trim(),
     ip_whitelist: document.getElementById('cfg-ip-whitelist').value.trim(),
     backup_script: document.getElementById('cfg-backup-script').value.trim(),
+    popup_alert_enabled: document.getElementById('cfg-popup-enabled').checked,
+    popup_repeat_min: parseInt(document.getElementById('cfg-popup-repeat').value, 10) || 60,
+    msp_branding: {
+      company_name: document.getElementById('cfg-support-name').value.trim(),
+      support_phone: document.getElementById('cfg-support-phone').value.trim(),
+      support_telegram: document.getElementById('cfg-support-tg').value.trim()
+    },
     language: currentLang
   };
 
@@ -521,6 +528,12 @@ async function refreshData() {
       document.getElementById('cfg-auth-pass').value = cfg.auth_pass || '';
       document.getElementById('cfg-ip-whitelist').value = cfg.ip_whitelist || '';
       document.getElementById('cfg-backup-script').value = cfg.backup_script || '';
+      document.getElementById('cfg-popup-enabled').checked = (cfg.popup_alert_enabled !== false);
+      document.getElementById('cfg-popup-repeat').value = cfg.popup_repeat_min || 60;
+      const br = cfg.msp_branding || {};
+      document.getElementById('cfg-support-name').value = br.company_name || '';
+      document.getElementById('cfg-support-phone').value = br.support_phone || '';
+      document.getElementById('cfg-support-tg').value = br.support_telegram || '';
     }
     document.getElementById('thresh-input-cpu').value = cfg.cpu_threshold || 70;
     document.getElementById('thresh-input-mb').value = cfg.mb_threshold || 50;
