@@ -137,8 +137,8 @@ func (h *HubManager) LoadSettings() {
             } else {
                 h.language = "ru"
             }
-            if hs.Nodes == nil {
-                h.nodes = make([]NodeConfig, 0)
+            if len(hs.Nodes) == 0 {
+                h.nodes = []NodeConfig{{ID: "local-pc", Name: "Локальный хост", Group: "IT Сервер", Host: "127.0.0.1:48123", AuthUser: "admin", AuthPass: "", AlertOnOffline: true}}
             } else {
                             if hs.ClientOrganization != "" { h.clientOrganization = hs.ClientOrganization }
             h.mspBranding = hs.MspBranding

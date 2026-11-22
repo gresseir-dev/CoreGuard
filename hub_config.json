@@ -1,1 +1,20 @@
-{"port":9090,"telegram_token":"","telegram_chat_id":"","alert_temp_c":60,"alert_wear_pct":85}
+{
+  "language": "ru",
+  "client_organization": "",
+  "nodes": [
+    {
+      "id": "local-pc",
+      "name": "Локальный хост",
+      "group": "IT Сервер",
+      "host": "127.0.0.1:48123",
+      "auth_user": "admin",
+      "auth_pass": "",
+      "alert_on_offline": true
+    }
+  ],
+  "telegram": {
+    "enabled": false,
+    "bot_token": "",
+    "chat_id": ""
+  }
+}
