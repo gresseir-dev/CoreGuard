@@ -738,5 +738,256 @@
     loadHub();
     setInterval(loadHub, 5000);
   </script>
+<!-- Панель управления CoreGuard Backup в Хабе -->
+<div id="cgBackupModal" style="display:none; position:fixed; inset:0; background:rgba(2,6,23,0.82); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#1e293b; border:1px solid #475569; border-radius:10px; width:620px; max-width:94vw; padding:22px; color:#f8fafc; font-family:'Segoe UI',sans-serif; box-shadow:0 20px 40px rgba(0,0,0,0.6);">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:12px; margin-bottom:16px;">
+      <h3 style="margin:0; font-size:17px; color:#38bdf8;">💾 Сетевое управление CoreGuard Backup</h3>
+      <span style="cursor:pointer; color:#94a3b8; font-size:18px;" onclick="document.getElementById('cgBackupModal').style.display='none'">✕</span>
+    </div>
+    
+    <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">Узел сети (выберите из списка или введите имя/IP)</label>
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <input id="hubBkpHost" list="hubHostsList" value="LocalHost" onchange="loadHubBackupCfg()" style="flex:1; background:#0f172a; border:1px solid #475569; color:#fff; padding:8px 10px; border-radius:6px;">
+      <datalist id="hubHostsList"></datalist>
+      <button onclick="loadHubBackupCfg()" style="background:#334155; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer;">🔄 Загрузить</button>
+    </div>
+    
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+      <label style="font-size:12px; color:#94a3b8;">Папки для резервного копирования (каждая с новой строки)</label>
+      <button onclick="openRemoteExplorer('source')" style="background:#2563eb; color:#fff; border:none; padding:4px 10px; border-radius:5px; font-size:12px; cursor:pointer;">📂 Проводник папок узла...</button>
+    </div>
+    <textarea id="hubBkpDirs" rows="4" placeholder="C:\Bases1C&#10;D:\Documents" style="width:100%; box-sizing:border-box; background:#0f172a; border:1px solid #475569; color:#fff; padding:8px 10px; border-radius:6px; margin-bottom:10px; font-family:Consolas,monospace;"></textarea>
+    
+    <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">Папка назначения на узле (куда сохранять ZIP)</label>
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <input id="hubBkpDest" value="D:\Backups" style="flex:1; background:#0f172a; border:1px solid #475569; color:#fff; padding:8px 10px; border-radius:6px;">
+      <button onclick="openRemoteExplorer('dest')" style="background:#334155; color:#fff; border:none; padding:8px 12px; border-radius:6px; font-size:12px; cursor:pointer;">📂 Обзор...</button>
+    </div>
+    
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:14px;">
+      <div>
+        <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">Время (ЧЧ:ММ)</label>
+        <input id="hubBkpTime" value="23:00" style="width:100%; box-sizing:border-box; background:#0f172a; border:1px solid #475569; color:#fff; padding:8px; border-radius:6px;">
+      </div>
+      <div>
+        <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">Хранить копий</label>
+        <input id="hubBkpKeep" type="number" value="7" style="width:100%; box-sizing:border-box; background:#0f172a; border:1px solid #475569; color:#fff; padding:8px; border-radius:6px;">
+      </div>
+      <div>
+        <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">Теневая VSS</label>
+        <select id="hubBkpVss" style="width:100%; box-sizing:border-box; background:#0f172a; border:1px solid #475569; color:#fff; padding:8px; border-radius:6px;">
+          <option value="true">Вкл (true)</option>
+          <option value="false">Выкл (false)</option>
+        </select>
+      </div>
+    </div>
+    
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <span id="hubBkpStatus" style="font-size:12px; color:#94a3b8;"></span>
+      <button onclick="saveHubBackupCfg()" style="background:#10b981; color:#fff; border:none; padding:9px 18px; border-radius:6px; font-weight:600; cursor:pointer;">💾 Сохранить и отправить на узел</button>
+    </div>
+  </div>
+</div>
+
+<!-- Сетевой проводник папок удалённого узла -->
+<div id="remoteTreeModal" style="display:none; position:fixed; inset:0; background:rgba(2,6,23,0.88); z-index:10000; align-items:center; justify-content:center;">
+  <div style="background:#1e293b; border:1px solid #475569; border-radius:10px; width:560px; max-width:92vw; max-height:80vh; display:flex; flex-direction:column; color:#f8fafc; font-family:'Segoe UI',sans-serif;">
+    <div style="padding:14px 18px; border-bottom:1px solid #334155; display:flex; justify-content:space-between; font-weight:600;">
+      <span id="remoteTreeTitle">Папки на удалённом узле</span>
+      <span style="cursor:pointer; color:#94a3b8;" onclick="document.getElementById('remoteTreeModal').style.display='none'">✕</span>
+    </div>
+    <div id="remoteTreeBody" style="padding:14px 18px; overflow-y:auto; flex:1; background:#0f172a; font-size:13.5px;"></div>
+    <div style="padding:12px 18px; border-top:1px solid #334155; display:flex; justify-content:flex-end; gap:8px;">
+      <button onclick="document.getElementById('remoteTreeModal').style.display='none'" style="background:#334155; color:#fff; border:none; padding:7px 14px; border-radius:6px; cursor:pointer;">Отмена</button>
+      <button onclick="applyRemoteTree()" style="background:#10b981; color:#fff; border:none; padding:7px 16px; border-radius:6px; font-weight:600; cursor:pointer;">Применить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let remoteTreeMode = 'source';
+let remoteTempSet = new Set();
+
+window.addEventListener('DOMContentLoaded', () => {
+  const btns = Array.from(document.querySelectorAll('button'));
+  const settingsBtn = btns.find(b => b.textContent.includes('Настройки') || b.textContent.includes('Журнал тревог'));
+  if (settingsBtn && settingsBtn.parentElement) {
+    const bkpBtn = document.createElement('button');
+    bkpBtn.className = settingsBtn.className;
+    bkpBtn.innerHTML = '💾 Бэкапы';
+    bkpBtn.style.marginRight = '8px';
+    bkpBtn.onclick = async () => {
+      document.getElementById('cgBackupModal').style.display = 'flex';
+      await refreshBackupHosts();
+      await loadHubBackupCfg();
+    };
+    settingsBtn.parentElement.insertBefore(bkpBtn, settingsBtn);
+  }
+});
+
+async function refreshBackupHosts() {
+  const res = await fetch('/api/backup/hosts');
+  if (res.ok) {
+    const map = await res.json();
+    const dl = document.getElementById('hubHostsList');
+    dl.innerHTML = '';
+    const hosts = Object.keys(map);
+    hosts.forEach(h => {
+      const opt = document.createElement('option');
+      opt.value = h;
+      opt.label = h + ' (' + map[h] + ')';
+      dl.appendChild(opt);
+    });
+    if (hosts.length > 0 && !hosts.includes(document.getElementById('hubBkpHost').value)) {
+      document.getElementById('hubBkpHost').value = hosts[0];
+    }
+  }
+}
+
+async function loadHubBackupCfg() {
+  const host = document.getElementById('hubBkpHost').value.trim();
+  const st = document.getElementById('hubBkpStatus');
+  if (!host) return;
+  st.textContent = 'Загрузка...';
+  const res = await fetch('/api/backup/config?from_ui=1&host=' + encodeURIComponent(host));
+  if (res.ok) {
+    const c = await res.json();
+    document.getElementById('hubBkpDirs').value = (c.source_dirs || []).join('\n');
+    document.getElementById('hubBkpDest').value = c.dest_dir || 'D:\\Backups';
+    document.getElementById('hubBkpTime').value = c.schedule_time || '23:00';
+    document.getElementById('hubBkpKeep').value = c.keep_count || 7;
+    document.getElementById('hubBkpVss').value = String(c.use_vss !== false);
+    st.textContent = '✅ Конфигурация загружена (' + (c.source_dirs ? c.source_dirs.length : 0) + ' папок)';
+  } else {
+    document.getElementById('hubBkpDirs').value = '';
+    st.textContent = 'ℹ️ Для узла ещё нет сохранённого профиля';
+  }
+}
+
+async function saveHubBackupCfg() {
+  const host = document.getElementById('hubBkpHost').value.trim();
+  const dirs = document.getElementById('hubBkpDirs').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const payload = {
+    host: host,
+    from_ui: true,
+    config: {
+      org_name: host,
+      source_dirs: dirs,
+      dest_dir: document.getElementById('hubBkpDest').value.trim(),
+      schedule_time: document.getElementById('hubBkpTime').value.trim(),
+      keep_count: parseInt(document.getElementById('hubBkpKeep').value) || 7,
+      use_vss: document.getElementById('hubBkpVss').value === 'true'
+    }
+  };
+  const res = await fetch('/api/backup/config', { method: 'POST', body: JSON.stringify(payload) });
+  if (res.ok) {
+    document.getElementById('hubBkpStatus').textContent = '✅ Отправлено на ' + host;
+    alert('Настройки сохранены и переданы на сетевой узел ' + host + '!');
+  }
+}
+
+async function openRemoteExplorer(mode) {
+  remoteTreeMode = mode;
+  const host = document.getElementById('hubBkpHost').value.trim();
+  if (!host) { alert('Укажите имя или IP узла!'); return; }
+  
+  if (mode === 'source') {
+    const existing = document.getElementById('hubBkpDirs').value.split('\n').map(s => s.trim()).filter(Boolean);
+    remoteTempSet = new Set(existing);
+    document.getElementById('remoteTreeTitle').textContent = 'Выбор папок на узле: ' + host;
+  } else {
+    const d = document.getElementById('hubBkpDest').value.trim();
+    remoteTempSet = d ? new Set([d]) : new Set();
+    document.getElementById('remoteTreeTitle').textContent = 'Папка назначения на узле: ' + host;
+  }
+  
+  document.getElementById('remoteTreeModal').style.display = 'flex';
+  const body = document.getElementById('remoteTreeBody');
+  body.innerHTML = 'Подключение к ' + host + ':9095...';
+  await loadRemoteBranch(host, '', body, true);
+}
+
+async function loadRemoteBranch(host, dirPath, container, isRoot) {
+  const res = await fetch('/api/backup/remote-fs?host=' + encodeURIComponent(host) + '&path=' + encodeURIComponent(dirPath));
+  if (!res.ok) {
+    const errTxt = await res.text();
+    container.innerHTML = `<div style="color:#f87171;">Ошибка связи с узлом: ${errTxt}<br><small>Убедитесь, что на узле запущен CoreGuard Backup и открыт порт 9095.</small></div>`;
+    return;
+  }
+  const items = await res.json();
+  container.innerHTML = '';
+  if (!items || items.length === 0) {
+    container.innerHTML = '<div style="color:#64748b; font-size:12px;">(пусто)</div>';
+    return;
+  }
+  items.forEach(item => {
+    const wrap = document.createElement('div');
+    wrap.style.margin = '3px 0';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; align-items:center; padding:4px; cursor:pointer; border-radius:4px;';
+    
+    const tog = document.createElement('span');
+    tog.textContent = '▶';
+    tog.style.cssText = 'width:18px; font-size:11px; color:#94a3b8;';
+    
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = remoteTempSet.has(item.path);
+    cb.style.cssText = 'margin:0 8px 0 2px; accent-color:#10b981;';
+    cb.onclick = (e) => {
+      e.stopPropagation();
+      if (remoteTreeMode === 'dest') {
+        document.querySelectorAll('#remoteTreeBody input[type=checkbox]').forEach(el => { if (el !== cb) el.checked = false; });
+        remoteTempSet.clear();
+      }
+      if (cb.checked) remoteTempSet.add(item.path);
+      else remoteTempSet.delete(item.path);
+    };
+    
+    const lbl = document.createElement('span');
+    lbl.textContent = (isRoot ? '💽 ' : '📁 ') + item.name;
+    
+    const sub = document.createElement('div');
+    sub.style.cssText = 'padding-left:20px; border-left:1px dashed #334155; margin-left:7px; display:none;';
+    
+    let loaded = false;
+    const expand = async () => {
+      if (sub.style.display === 'none') {
+        sub.style.display = 'block';
+        tog.textContent = '▼';
+        if (!loaded) {
+          sub.innerHTML = '<small style="color:#64748b;">Загрузка...</small>';
+          await loadRemoteBranch(host, item.path, sub, false);
+          loaded = true;
+        }
+      } else {
+        sub.style.display = 'none';
+        tog.textContent = '▶';
+      }
+    };
+    tog.onclick = expand;
+    lbl.onclick = expand;
+    
+    row.appendChild(tog);
+    row.appendChild(cb);
+    row.appendChild(lbl);
+    wrap.appendChild(row);
+    wrap.appendChild(sub);
+    container.appendChild(wrap);
+  });
+}
+
+function applyRemoteTree() {
+  if (remoteTreeMode === 'source') {
+    const sorted = Array.from(remoteTempSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    document.getElementById('hubBkpDirs').value = sorted.join('\n');
+  } else {
+    const arr = Array.from(remoteTempSet);
+    if (arr.length > 0) document.getElementById('hubBkpDest').value = arr[0];
+  }
+  document.getElementById('remoteTreeModal').style.display = 'none';
+}
+</script>
 </body>
 </html>

@@ -4,11 +4,11 @@
 ; =====================================================================
 
 #define MyAppName "CoreGuard Enterprise"
-#define MyAppVersion "2.2.4"
+#define MyAppVersion "2.2.19"
 #define MyAppPublisher "CoreGuard"
-#define MyAppExeName "CoreGuard.exe"
-#define MyHubExeName "coreguard_hub.exe"
-#define MyServiceName "CoreGuardHub"
+#define MyAppExeName "CoreGuard.exe"; Components: agent
+#define MyHubExeName "coreguard_hub.exe"; Components: hub
+#define MyServiceName "CoreGuardHub"; Components: hub
 
 [Setup]
 AppId={{D1A47B2E-8A33-4F71-B892-3C4D11E89A02}
@@ -35,45 +35,56 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
+[Types]
+Name: "agentonly"; Description: "Клиентский ПК (Только агент мониторинга CoreGuard)"
+Name: "full"; Description: "Главный сервер администратора (Агент + Центральный Хаб)"
+Name: "custom"; Description: "Выборочная установка"; Flags: iscustom
+
+[Components]
+Name: "agent"; Description: "CoreGuard Agent (Мониторинг железа, Native SMART и локальный дашборд)"; Types: agentonly full custom; Flags: fixed
+Name: "hub"; Description: "CoreGuard Central Hub (Веб-сервер централизованного мониторинга всех ПК)"; Types: full
+
 [Files]
 Source: "PRODUCT_BROCHURE.pdf"; DestDir: "{app}"; Flags: ignoreversion
 ; Исполняемые файлы
-Source: "CoreGuard.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "coreguard_hub.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "CoreGuard.exe"; DestDir: "{app}"; Flags: ignoreversion; Components: agent
+Source: "coreguard_hub.exe"; DestDir: "{app}"; Flags: ignoreversion; Components: hub
 ; Конфигурационные файлы (не перезаписываются, если уже существуют)
 Source: "config.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 Source: "hub_config.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 Source: "nodes.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 ; Документация в дистрибутиве
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "README_EN.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\CoreGuard\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\CoreGuard\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Описание и презентация (PDF)"; Filename: "{app}\PRODUCT_BROCHURE.pdf"
 Name: "{group}\CoreGuard Agent"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\CoreGuard Agent"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-Name: "{group}\Веб-панель CoreGuard Hub"; Filename: "http://localhost:9090"
-Name: "{autodesktop}\Веб-панель CoreGuard Hub"; Filename: "http://localhost:9090"; Tasks: desktopicon
+Name: "{group}\Веб-панель CoreGuard Hub"; Filename: "http://localhost:9090"; Components: hub
+Name: "{autodesktop}\Веб-панель CoreGuard Hub"; Filename: "http://localhost:9090"; Tasks: desktopicon; Components: hub
 
 [Run]
-Filename: "schtasks.exe"; Parameters: "/Create /TN ""CoreGuardAgent"" /TR ""\""{app}\CoreGuard.exe\"""" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden
+Filename: "schtasks.exe"; Parameters: "/Create /TN ""CoreGuardAgent"" /TR ""\""{app}\CoreGuard.exe\"""" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden; Components: agent
 ; 1. Принудительная зачистка зависших процессов перед регистрацией и стартом
 Filename: "{cmd}"; Parameters: "/c taskkill /f /im {#MyAppExeName} /im {#MyHubExeName} 2>nul || exit 0"; Flags: runhidden; StatusMsg: "Проверка и освобождение портов..."
 
 ; 2. Регистрация хаба как системной службы Windows
-Filename: "{sys}\sc.exe"; Parameters: "create {#MyServiceName} binPath= ""{app}\{#MyHubExeName}"" start= auto DisplayName= ""CoreGuard Central Hub"""; Flags: runhidden; StatusMsg: "Регистрация службы CoreGuardHub..."
+Filename: "{sys}\sc.exe"; Parameters: "create {#MyServiceName} binPath= ""{app}\{#MyHubExeName}"" start= auto DisplayName= ""CoreGuard Central Hub"""; Flags: runhidden; StatusMsg: "Регистрация службы CoreGuardHub..."; Components: hub
 
 ; 3. Запуск службы хаба
-Filename: "{sys}\sc.exe"; Parameters: "start {#MyServiceName}"; Flags: runhidden; StatusMsg: "Запуск службы CoreGuardHub..."
+Filename: "{sys}\sc.exe"; Parameters: "start {#MyServiceName}"; Flags: runhidden; StatusMsg: "Запуск службы CoreGuardHub..."; Components: hub
 
 ; 4. Запуск агента с правами администратора
 Filename: "{app}\{#MyAppExeName}"; Flags: nowait postinstall; Description: "Запустить CoreGuard Agent"
 
 ; 5. Автоматическое открытие веб-панели мониторинга в браузере
-Filename: "http://localhost:9090"; Flags: shellexec runmaximized postinstall; Description: "Открыть панель мониторинга Hub (http://localhost:9090)"
+Filename: "http://localhost:9090"; Flags: shellexec runmaximized postinstall; Description: "Открыть панель мониторинга Hub (http://localhost:9090)"; Components: hub
 
 [UninstallRun]
-Filename: "schtasks.exe"; Parameters: "/Delete /TN ""CoreGuardAgent"" /F"; Flags: runhidden
+Filename: "schtasks.exe"; Parameters: "/Delete /TN ""CoreGuardAgent"" /F"; Flags: runhidden; Components: agent
 ; 1. Синхронная остановка службы (net stop ожидает фактического завершения процесса)
 Filename: "{sys}\net.exe"; Parameters: "stop {#MyServiceName}"; Flags: runhidden
 

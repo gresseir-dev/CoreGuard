@@ -819,5 +819,167 @@ setLanguage(savedLang);
 
 setInterval(refreshData, 30000);
 </script>
+<!-- Safe Native SMART Start -->
+<script>
+(function() {
+  function findDrivesLeafCard() {
+    const allElements = document.querySelectorAll('h1, h2, h3, h4, div, span, p');
+    for (const el of allElements) {
+      // Ищем элемент, содержащий именно этот текст напрямую (а не через крупный родительский контейнер)
+      const directText = Array.from(el.childNodes)
+        .filter(n => n.nodeType === Node.TEXT_NODE)
+        .map(n => n.nodeValue)
+        .join('');
+      if (directText.includes('Физические накопители, износ и наработка')) {
+        // Поднимаемся не более чем на 2 уровня вверх и проверяем, что внутри НЕТ <canvas> (графиков!)
+        let candidate = el.parentElement;
+        for (let step = 0; step < 3 && candidate && candidate.tagName !== 'BODY'; step++) {
+          if (!candidate.querySelector('canvas') && candidate.querySelectorAll('h1,h2,h3').length <= 1) {
+            return { card: candidate, header: step === 0 ? el : el.parentElement };
+          }
+          candidate = candidate.parentElement;
+        }
+      }
+    }
+    return null;
+  }
+
+  async function renderSafeSmartBlock() {
+    const found = findDrivesLeafCard();
+    if (!found) return;
+
+    let bodyBox = document.getElementById('cgNativeDrivesBody');
+    if (!bodyBox) {
+      // Добавляем кнопку обновления в заголовок карточки
+      if (!document.getElementById('cgSmartRefreshBtn')) {
+        const hdr = found.header;
+        hdr.style.display = 'flex';
+        hdr.style.justifyContent = 'space-between';
+        hdr.style.alignItems = 'center';
+        hdr.style.gap = '12px';
+
+        const btn = document.createElement('button');
+        btn.id = 'cgSmartRefreshBtn';
+        btn.type = 'button';
+        btn.textContent = '🔄 Обновить SMART';
+        btn.style.cssText = 'background:#2563eb; color:#fff; border:none; padding:5px 11px; border-radius:6px; font-weight:600; cursor:pointer; font-size:12px; flex-shrink:0;';
+        btn.onclick = renderSafeSmartBlock;
+        hdr.appendChild(btn);
+      }
+
+      // Скрываем только старые дочерние блоки списка дисков (не трогая header и canvas)
+      Array.from(found.card.children).forEach(ch => {
+        if (ch !== found.header && !ch.contains(found.header) && !ch.querySelector('canvas')) {
+          ch.style.display = 'none';
+        }
+      });
+
+      bodyBox = document.createElement('div');
+      bodyBox.id = 'cgNativeDrivesBody';
+      bodyBox.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:14px; margin-top:14px;';
+      bodyBox.innerHTML = '<div style="color:#94a3b8; font-size:13px;">Чтение контроллеров накопителей...</div>';
+      found.card.appendChild(bodyBox);
+    }
+
+    try {
+      const res = await fetch('/api/smart/native');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const drives = await res.json();
+
+      if (!drives || drives.length === 0) {
+        bodyBox.innerHTML = '<div style="color:#f59e0b; font-size:13px;">Физические диски не обнаружены (запустите от имени Администратора).</div>';
+        return;
+      }
+
+      bodyBox.innerHTML = '';
+      drives.forEach(d => {
+        const hp = d.health_percent ?? 100;
+        const barColor = hp > 60 ? '#10b981' : (hp > 25 ? '#f59e0b' : '#ef4444');
+        const statusColor = d.status === 'OK' ? '#10b981' : (d.status === 'WARNING' ? '#f59e0b' : '#ef4444');
+        const warningsHtml = (d.warnings && d.warnings.length > 0)
+          ? `<div style="background:rgba(127,29,29,0.55); border:1px solid #ef4444; color:#fca5a5; padding:7px 10px; border-radius:6px; font-size:12px; margin-top:10px;">⚠️ ${d.warnings.join('<br>⚠️ ')}</div>`
+          : '';
+
+        let attrsRows = '';
+        (d.attributes || []).forEach(a => {
+          const rowStyle = a.critical ? 'color:#fca5a5; font-weight:600;' : 'color:#cbd5e1;';
+          attrsRows += `<tr style="${rowStyle} border-bottom:1px solid #334155;">
+            <td style="padding:4px 6px;">${a.id}</td>
+            <td style="padding:4px 6px;">${a.name}</td>
+            <td style="padding:4px 6px;">${a.current || '-'}</td>
+            <td style="padding:4px 6px;">${a.threshold || '-'}</td>
+            <td style="padding:4px 6px; font-family:Consolas,monospace;">${a.raw}</td>
+          </tr>`;
+        });
+
+        bodyBox.innerHTML += `
+          <div style="background:#0f172a; border:1px solid #334155; border-radius:8px; padding:15px;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px;">
+              <div>
+                <div style="font-weight:700; font-size:14.5px; color:#f8fafc;">${d.model}</div>
+                <div style="font-size:11.5px; color:#64748b; font-family:Consolas,monospace;">${d.device} • ${d.protocol} • S/N: ${d.serial || 'N/A'}</div>
+              </div>
+              <span style="background:${statusColor}22; color:${statusColor}; border:1px solid ${statusColor}; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; flex-shrink:0;">${d.status}</span>
+            </div>
+
+            <div style="margin:10px 0;">
+              <div style="display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:4px;">
+                <span style="color:#94a3b8;">Здоровье / Остаток ресурса</span>
+                <span style="font-weight:700; color:${barColor};">${hp}%</span>
+              </div>
+              <div style="width:100%; height:8px; background:#1e293b; border-radius:4px; overflow:hidden;">
+                <div style="width:${hp}%; height:100%; background:${barColor}; transition:width 0.4s;"></div>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; background:#1e293b; padding:9px; border-radius:6px; font-size:12px; text-align:center;">
+              <div>
+                <div style="color:#94a3b8;">Температура</div>
+                <div style="font-size:14px; font-weight:700; color:${d.temperature_c >= 55 ? '#f59e0b' : '#38bdf8'};">${d.temperature_c > 0 ? d.temperature_c + ' °C' : 'N/A'}</div>
+              </div>
+              <div>
+                <div style="color:#94a3b8;">Наработка</div>
+                <div style="font-size:14px; font-weight:700; color:#f8fafc;">${d.power_on_hours} ч</div>
+              </div>
+              <div>
+                <div style="color:#94a3b8;">Записано</div>
+                <div style="font-size:14px; font-weight:700; color:#f8fafc;">${d.data_written_gb > 0 ? d.data_written_gb.toFixed(0) + ' ГБ' : 'N/A'}</div>
+              </div>
+            </div>
+
+            ${warningsHtml}
+
+            <details style="margin-top:11px; font-size:12px;">
+              <summary style="cursor:pointer; color:#38bdf8; user-select:none;">Все атрибуты SMART (${(d.attributes || []).length})</summary>
+              <div style="max-height:220px; overflow-y:auto; margin-top:8px; border:1px solid #334155; border-radius:6px;">
+                <table style="width:100%; border-collapse:collapse; font-size:11.5px; text-align:left;">
+                  <thead style="background:#1e293b; color:#94a3b8; position:sticky; top:0;">
+                    <tr>
+                      <th style="padding:5px 6px;">ID</th>
+                      <th style="padding:5px 6px;">Атрибут</th>
+                      <th style="padding:5px 6px;">Тек.</th>
+                      <th style="padding:5px 6px;">Порог</th>
+                      <th style="padding:5px 6px;">Raw</th>
+                    </tr>
+                  </thead>
+                  <tbody>${attrsRows}</tbody>
+                </table>
+              </div>
+            </details>
+          </div>
+        `;
+      });
+    } catch (err) {
+      bodyBox.innerHTML = `<div style="color:#f87171; font-size:13px;">Ошибка чтения SMART: ${err.message}</div>`;
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    renderSafeSmartBlock();
+    setInterval(renderSafeSmartBlock, 30000);
+  });
+})();
+</script>
+<!-- Safe Native SMART End -->
 </body>
 </html>

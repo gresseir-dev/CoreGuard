@@ -1,3 +1,4 @@
+// CoreGuard Enterprise - Copyright (C) 2026 gresseir-dev - Licensed under GNU GPLv3
 package main
 
 import (

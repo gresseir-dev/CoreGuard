@@ -1,9 +1,11 @@
-*.bak
-*.lock
 *.exe
 *.zip
-history.json
-hub_events.json
-brochure_temp.html
-publish.ps1
+*.tar.gz
 Output/
+*.bak
+*.log
+*.lock
+history.json
+nodes.json
+hub_config.json
+hub_events.json

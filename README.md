@@ -1,25 +1,21 @@
-# CoreGuard Enterprise (Windows x64)
+# CoreGuard Enterprise
 
-**Бесплатная система проактивного мониторинга ИТ-инфраструктуры, серверов и накопителей.**  
-Полный функционал Enterprise из коробки — без лицензионных ключей, подписок и ограничений по количеству узлов.
+**Lightweight, Open-Source Hardware & Storage Health Monitoring Suite for Windows (GPLv3)**
 
----
+CoreGuard Enterprise is a zero-dependency monitoring suite written in Go for system administrators and IT infrastructure engineers. It reads NVMe/SATA SMART diagnostics directly via Windows kernel IOCTL calls, monitors thermal sensors, and aggregates fleet status into a central NOC dashboard.
 
-### Ключевые возможности
-* **100% Free & Full-Featured:** Неограниченное количество подключаемых ПК и серверов, интервал опроса от 1 минуты, удалённый веб-доступ и сценарии аварийного резервного копирования доступны сразу после установки.
-* **Низкоуровневая диагностика SMART:** Прямой опрос контроллеров NVMe и SATA HDD/SSD без сторонних утилит — контроль температуры, износа ячеек и переназначенных секторов.
-* **Центральный NOC-хаб (`coreguard_hub.exe`):** Единая веб-панель управления парком техники (порт `9090`), журнал инцидентов с квитированием (`ACK`) и мгновенные уведомления в **Telegram**.
-* **Сквозной White Label для ИТ-аутсорсинга (MSP):** При установке хаба задаётся наименование обслуживаемой организации, а в настройках указываются контакты обслуживающей компании (телефон, Telegram, Email). Эти данные автоматически синхронизируются со всеми клиентскими агентами (`POST /api/branding`).
-* **Минимальная нагрузка:** Нативная разработка на Go без внешних зависимостей. Потребление RAM агентом — менее **15 МБ**.
+## Features
+- **Native Windows IOCTL SMART:** Direct communication with NVMe and SATA storage drivers without external CLI tools (no smartctl.exe required).
+- **Accurate SSD/HDD Health:** Tracks wear level (Percentage Used, Available Spare, SSD Life Left), temperature, power-on hours, data written, and full SMART attributes inside the local dashboard.
+- **Silent System Tray Agent:** Runs silently in background (-H=windowsgui) with live thermal charts.
+- **CoreGuard Central Hub:** Centralized web console (:9090) with node health overview, incident log, and Telegram alerts.
 
----
-
-### Быстрый старт и сборка
-
-1. Скачайте актуальный инсталлятор `CoreGuard_Setup_v*_x64.exe` из раздела [Releases](../../releases).
-2. Запустите установщик от имени администратора и укажите название обслуживаемой организации.
-3. Инсталлятор автоматически зарегистрирует службу `CoreGuardHub`, запустит агент в трее и откроет панель управления: `http://localhost:9090`.
-
-Для сборки из исходников (требуется Go 1.21+ и Inno Setup 6):
+## Build
 ```powershell
+go build -ldflags="-H=windowsgui" -o CoreGuard.exe .
+go build -ldflags="-H=windowsgui" -o coreguard_hub.exe ./cmd/hub
 .\build.ps1
+```
+
+## License
+Licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE).

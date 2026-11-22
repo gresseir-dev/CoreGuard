@@ -1,3 +1,4 @@
+// CoreGuard Enterprise - Copyright (C) 2026 gresseir-dev - Licensed under GNU GPLv3
 package main
 
 import (
@@ -941,7 +942,8 @@ func remoteAuthMiddleware(next http.Handler) http.Handler {
 func buildAppRouter() *http.ServeMux {
     mux := http.NewServeMux()
 
-    mux.HandleFunc("/api/data", func(w http.ResponseWriter, r *http.Request) {
+    mux.HandleFunc("/api/smart/native", handleNativeSmartAPI)
+	mux.HandleFunc("/api/data", func(w http.ResponseWriter, r *http.Request) {
         stateMu.RLock()
         defer stateMu.RUnlock()
 

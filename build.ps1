@@ -56,11 +56,16 @@ if (-not $SkipGoBuild) {
     $env:GOARCH = "amd64"
     $env:GOOS = "windows"
     go build -ldflags="-s -w -H windowsgui" -o "C:\CoreGuard\CoreGuard.exe" .
+if (Test-Path "C:\CoreGuardBackup\main.go") {
+    Push-Location "C:\CoreGuardBackup"
+# [EXCLUDED] coreguard_backup.exe
+    Pop-Location
+}
     if ($LASTEXITCODE -ne 0) { throw "Agent build failed!" }
 
     Write-Host "[2/3] Compiling coreguard_hub.exe (x64)..." -ForegroundColor Yellow
     Push-Location "C:\CoreGuard\cmd\hub"
-    go build -ldflags="-s -w" -o "C:\CoreGuard\coreguard_hub.exe" .
+    go build -o "C:\CoreGuard\coreguard_hub.exe" .
     $hubExit = $LASTEXITCODE
     Pop-Location
     if ($hubExit -ne 0) { throw "Hub build failed!" }
