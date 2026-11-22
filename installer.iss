@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "CoreGuard Enterprise"
-#define MyAppVersion "2.2.19"
+#define MyAppVersion "2.2.21"
 #define MyAppPublisher "CoreGuard"
 #define MyAppExeName "CoreGuard.exe"; Components: agent
 #define MyHubExeName "coreguard_hub.exe"; Components: hub
@@ -97,3 +97,27 @@ Filename: "{sys}\sc.exe"; Parameters: "delete {#MyServiceName}"; Flags: runhidde
 Type: files; Name: "{app}\hub_events.json"
 Type: files; Name: "{app}\history.json"
 Type: files; Name: "{app}\coreguard.lock"
+[Code]
+// [AUTO-HUB-BIND-START]
+procedure ConfigureLocalHubBinding();
+var
+  CfgFile: String;
+  JsonText: String;
+begin
+  if WizardIsComponentSelected('hub') then
+  begin
+    CfgFile := ExpandConstant('{app}\config.json');
+    JsonText := '{' + #13#10 +
+                '  "hub_url": "http://127.0.0.1:9090",' + #13#10 +
+                '  "push_interval_sec": 10' + #13#10 +
+                '}';
+    SaveStringToFile(CfgFile, JsonText, False);
+  end;
+end;
+// [AUTO-HUB-BIND-END]
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    ConfigureLocalHubBinding();
+end;

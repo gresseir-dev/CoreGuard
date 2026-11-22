@@ -1,7 +1,7 @@
 *.exe
+!*Setup*.exe
 *.zip
 *.tar.gz
-Output/
 *.bak
 *.log
 *.lock
