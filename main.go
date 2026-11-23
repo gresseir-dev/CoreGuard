@@ -1314,11 +1314,24 @@ func startLocalWebServer() {
 
 func openDashboard() {
     url := fmt.Sprintf("http://127.0.0.1:%d", LocalDashboardPort)
-    cmd := exec.Command("cmd.exe", "/C", "start", "msedge", "--app="+url)
-    cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-    if err := cmd.Start(); err != nil {
-        _ = exec.Command("cmd.exe", "/C", "start", url).Start()
+    browsers := []string{
+        `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
+        `C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
+        `C:\Program Files\Google\Chrome\Application\chrome.exe`,
+        `C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
     }
+    for _, b := range browsers {
+        if _, err := os.Stat(b); err == nil {
+            cmd := exec.Command(b, "--app="+url)
+            cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+            if err := cmd.Start(); err == nil {
+                return
+            }
+        }
+    }
+    fallback := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url)
+    fallback.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+    _ = fallback.Start()
 }
 
 func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uintptr {
