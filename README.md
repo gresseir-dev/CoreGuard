@@ -1,21 +1,39 @@
 # CoreGuard Enterprise
 
-**Lightweight, Open-Source Hardware & Storage Health Monitoring Suite for Windows (GPLv3)**
+**Лёгкий Open-Source комплекс мониторинга состояния накопителей и температур для Windows (GPLv3)**
 
-CoreGuard Enterprise is a zero-dependency monitoring suite written in Go for system administrators and IT infrastructure engineers. It reads NVMe/SATA SMART diagnostics directly via Windows kernel IOCTL calls, monitors thermal sensors, and aggregates fleet status into a central NOC dashboard.
+**CoreGuard Enterprise** — автономный агент мониторинга на языке Go без внешних зависимостей для системных администраторов, сервисных инженеров и IT-аутсорсинга (MSP). Агент напрямую опрашивает NVMe- и SATA-накопители через нативные вызовы ядра Windows (IOCTL), отслеживает температуры процессора и системной платы, запускает скрипты аварийного резервного копирования и агрегирует телеметрию всех рабочих станций в единой веб-консоли **CoreGuard Central Hub**.
 
-## Features
-- **Native Windows IOCTL SMART:** Direct communication with NVMe and SATA storage drivers without external CLI tools (no smartctl.exe required).
-- **Accurate SSD/HDD Health:** Tracks wear level (Percentage Used, Available Spare, SSD Life Left), temperature, power-on hours, data written, and full SMART attributes inside the local dashboard.
-- **Silent System Tray Agent:** Runs silently in background (-H=windowsgui) with live thermal charts.
-- **CoreGuard Central Hub:** Centralized web console (:9090) with node health overview, incident log, and Telegram alerts.
+---
 
-## Build
-```powershell
-go build -ldflags="-H=windowsgui" -o CoreGuard.exe .
-go build -ldflags="-H=windowsgui" -o coreguard_hub.exe ./cmd/hub
+## Ключевые возможности
+
+### Агент мониторинга (CoreGuard.exe)
+* **Нативный Windows IOCTL SMART:** прямое чтение контроллеров NVMe и SATA без сторонних утилит (smartctl.exe не требуется), включая полные таблицы атрибутов SMART, счётчики переназначенных секторов, наработку в часах и объём записанных данных.
+* **Гибкий контроль каждого накопителя:** индивидуальные пороги температуры для каждого физического диска и функция **«Игнорировать диск»** (исключение проблемных или тестовых носителей из тревог и сводок Хаба).
+* **Мониторинг температур и системного тома:** контроль нагрева ЦП и материнской платы, отслеживание критического остатка свободного места на диске C: с интерактивными SVG-графиками динамики.
+* **Брендирование IT-поддержки (MSP) и тревоги:** вывод карточки обслуживающей организации и быстрых кнопок связи (телефон, Telegram, email), модальные окна критических предупреждений и запуск пользовательского .bat/.ps1 скрипта аварийного бэкапа при угрозе отказа диска.
+* **Тихая работа в трее и локальный веб-интерфейс:** фоновый режим (-H=windowsgui) с локальным дашбордом на http://127.0.0.1:48123/ (RU/EN) и защищённым LAN-доступом (Basic Auth + IP Whitelist).
+
+### Центральный сервер (coreguard_hub.exe)
+* **Единая консоль администратора (:9090):** работает как системная служба Windows (CoreGuardHub), собирает состояние парка ПК, отображает сводку здоровья дисков, температур и инцидентов.
+* **Удалённая синхронизация реквизитов:** централизованная передача названия объекта и контактов обслуживающей компании на клиентские агенты.
+* **Уведомления в Telegram:** мгновенные оповещения о критическом износе, перегреве или потере связи с узлом.
+
+### Профессиональный инсталлятор (Inno Setup 6)
+* Выбор режима установки: **Клиентский ПК (только Агент)** или **Главный сервер администратора (Агент + Central Hub)**.
+* **Сохранение конфигурации при деинсталляции:** встроенный диалог с галочкой позволяет сохранить config.json, hub_config.json и nodes.json (реквизиты организации, контакты IT и список узлов) при обновлении или тестировании.
+
+---
+
+## Сборка из исходного кода
+
+`powershell
+go build -ldflags="-s -w -H windowsgui" -o CoreGuard.exe .
+go build -ldflags="-s -w -H windowsgui" -o coreguard_hub.exe ./cmd/hub
 .\build.ps1
-```
+`",
+  ",
+  
 
-## License
-Licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE).
+Проект распространяется по свободной лицензии **GNU General Public License v3.0 (GPL-3.0)**. Подробности в файле [LICENSE](LICENSE).
