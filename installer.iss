@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "CoreGuard Enterprise"
-#define MyAppVersion "2.3.12"
+#define MyAppVersion "2.3.15"
 #define MyAppPublisher "CoreGuard"
 #define MyAppExeName "CoreGuard.exe"; Components: agent
 #define MyHubExeName "coreguard_hub.exe"; Components: hub
@@ -56,8 +56,6 @@ Source: "nodes.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 ; Документация в дистрибутиве
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\CoreGuard\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
-Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\CoreGuard\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Описание и презентация (PDF)"; Filename: "{app}\PRODUCT_BROCHURE.pdf"
@@ -101,4 +99,97 @@ Type: files; Name: "{app}\coreguard.lock"
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
+  begin
+    { Резерв под пост-установочные действия }
+  end;
+end;
+
+function AskKeepSettingsOnUninstall(): Boolean;
+var
+  Form: TSetupForm;
+  InfoLabel: TNewStaticText;
+  KeepCheck: TNewCheckBox;
+  OkBtn, CancelBtn: TNewButton;
+begin
+  Result := True;
+  if UninstallSilent then
+    Exit;
+
+  Form := CreateCustomForm(ScaleX(430), ScaleY(175), False, False);
+  try
+    Form.ClientWidth := ScaleX(430);
+    Form.ClientHeight := ScaleY(175);
+    Form.Caption := 'Удаление CoreGuard Enterprise';
+    Form.BorderStyle := bsDialog;
+    Form.Position := poScreenCenter;
+
+    InfoLabel := TNewStaticText.Create(Form);
+    InfoLabel.Parent := Form;
+    InfoLabel.Left := ScaleX(20);
+    InfoLabel.Top := ScaleY(16);
+    InfoLabel.Width := ScaleX(390);
+    InfoLabel.Height := ScaleY(46);
+    InfoLabel.AutoSize := False;
+    InfoLabel.WordWrap := True;
+    InfoLabel.Caption := 'Выберите, нужно ли сохранить конфигурацию перед удалением программы (удобно при обновлении или тестировании):';
+
+    KeepCheck := TNewCheckBox.Create(Form);
+    KeepCheck.Parent := Form;
+    KeepCheck.Left := ScaleX(20);
+    KeepCheck.Top := ScaleY(72);
+    KeepCheck.Width := ScaleX(390);
+    KeepCheck.Height := ScaleY(36);
+    KeepCheck.Caption := 'Сохранить реквизиты организации, контакты IT и настройки Хаба';
+    KeepCheck.Checked := True;
+
+    OkBtn := TNewButton.Create(Form);
+    OkBtn.Parent := Form;
+    OkBtn.Left := ScaleX(234);
+    OkBtn.Top := ScaleY(128);
+    OkBtn.Width := ScaleX(85);
+    OkBtn.Height := ScaleY(26);
+    OkBtn.Caption := 'Продолжить';
+    OkBtn.ModalResult := mrOk;
+    OkBtn.Default := True;
+
+    CancelBtn := TNewButton.Create(Form);
+    CancelBtn.Parent := Form;
+    CancelBtn.Left := ScaleX(326);
+    CancelBtn.Top := ScaleY(128);
+    CancelBtn.Width := ScaleX(85);
+    CancelBtn.Height := ScaleY(26);
+    CancelBtn.Caption := 'Отмена';
+    CancelBtn.ModalResult := mrCancel;
+    CancelBtn.Cancel := True;
+
+    if Form.ShowModal = mrOk then
+      Result := KeepCheck.Checked
+    else
+      Abort;
+  finally
+    Form.Free;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  AppDir: String;
+  KeepCfg: Boolean;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    KeepCfg := AskKeepSettingsOnUninstall();
+    AppDir := ExpandConstant('{app}');
+    if not KeepCfg then
+    begin
+      DeleteFile(AddBackslash(AppDir) + 'config.json');
+      DeleteFile(AddBackslash(AppDir) + 'hub_config.json');
+      DeleteFile(AddBackslash(AppDir) + 'nodes.json');
+    end;
+  end
+  else if CurUninstallStep = usPostUninstall then
+  begin
+    AppDir := ExpandConstant('{app}');
+    RemoveDir(AppDir);
+  end;
 end;

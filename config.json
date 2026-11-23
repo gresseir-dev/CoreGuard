@@ -1,10 +1,10 @@
 {
-  "client_organization": "ООО \"СубТехБурСервис\"",
+  "client_organization": "Моя Организация",
   "msp_branding": {
-    "company_name": "Gresseir Dev",
-    "support_phone": "+7 (912)-080-41-50",
-    "support_telegram": "@gresseir",
-    "support_email": "gresseir@mail.ru",
+    "company_name": "",
+    "support_phone": "",
+    "support_telegram": "",
+    "support_email": "",
     "website": ""
   },
   "mode": "ENTERPRISE",
