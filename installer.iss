@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "CoreGuard Enterprise"
-#define MyAppVersion "2.3.19"
+#define MyAppVersion "2.3.20"
 #define MyAppPublisher "CoreGuard"
 #define MyAppExeName "CoreGuard.exe"; Components: agent
 #define MyHubExeName "coreguard_hub.exe"; Components: hub
@@ -68,6 +68,7 @@ Name: "{autodesktop}\Веб-панель CoreGuard Hub"; Filename: "http://local
 
 [Run]
 Filename: "schtasks.exe"; Parameters: "/Create /TN ""CoreGuardAgent"" /TR ""\""{app}\CoreGuard.exe\"""" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden; Components: agent
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""CoreGuard Agent TCP 48123"" dir=in action=allow protocol=TCP localport=48123 profile=any"; Flags: runhidden; Components: agent
 ; 1. Принудительная зачистка зависших процессов перед регистрацией и стартом
 Filename: "{cmd}"; Parameters: "/c taskkill /f /im {#MyAppExeName} /im {#MyHubExeName} 2>nul || exit 0"; Flags: runhidden; StatusMsg: "Проверка и освобождение портов..."
 
@@ -85,6 +86,7 @@ Filename: "http://localhost:9090"; Flags: shellexec runmaximized postinstall; De
 
 [UninstallRun]
 Filename: "schtasks.exe"; Parameters: "/Delete /TN ""CoreGuardAgent"" /F"; Flags: runhidden; Components: agent; RunOnceId: "cg_uninst_1"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""CoreGuard Agent TCP 48123"""; Flags: runhidden; Components: agent; RunOnceId: "cg_uninst_fw"
 ; 1. Синхронная остановка службы (net stop ожидает фактического завершения процесса)
 Filename: "{sys}\net.exe"; Parameters: "stop {#MyServiceName}"; Flags: runhidden; RunOnceId: "cg_uninst_2"
 

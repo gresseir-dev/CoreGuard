@@ -434,7 +434,7 @@ func loadConfig() {
     globalConfig = Config{
         Mode:                "FREE",
         PollIntervalMin:     5,
-        RemoteAccessEnabled: false,
+        RemoteAccessEnabled: true,
         RemotePort:          48123,
         AuthUser:            "admin",
         AuthPass:            "",

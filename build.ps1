@@ -11,7 +11,7 @@ foreach ($cf in @("config.json", "hub_config.json", "nodes.json")) {
     if (Test-Path $cf) { Copy-Item $cf (Join-Path $cleanBackupDir $cf) -Force }
 }
 try {
-    '{"mode":"FREE","poll_interval_min":5,"remote_access_enabled":false,"remote_port":48123,"auth_user":"admin","cpu_threshold":70,"mb_threshold":50,"space_threshold_pct":10,"language":"RU","popup_alert_enabled":true,"popup_repeat_min":60}' | Set-Content "config.json" -Encoding UTF8
+    '{"mode":"FREE","poll_interval_min":5,"remote_access_enabled":true,"remote_port":48123,"auth_user":"admin","cpu_threshold":70,"mb_threshold":50,"space_threshold_pct":10,"language":"RU","popup_alert_enabled":true,"popup_repeat_min":60}' | Set-Content "config.json" -Encoding UTF8
     '{"language":"ru","nodes":[],"telegram":{"enabled":false,"notify_on_crit":true,"notify_on_offline":true}}' | Set-Content "hub_config.json" -Encoding UTF8
     '[]' | Set-Content "nodes.json" -Encoding UTF8
 Set-Location "C:\CoreGuard"
