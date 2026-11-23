@@ -1,9 +1,19 @@
-﻿param(
+param(
     [switch]$SkipGoBuild,
     [string]$SetVersion = ""
 )
 
 $ErrorActionPreference = "Stop"
+# Временный бэкап рабочих дев-конфигов на время сборки публичного инсталлятора
+$cleanBackupDir = Join-Path $env:TEMP "coreguard_clean_config_backup"
+New-Item -ItemType Directory -Path $cleanBackupDir -Force | Out-Null
+foreach ($cf in @("config.json", "hub_config.json", "nodes.json")) {
+    if (Test-Path $cf) { Copy-Item $cf (Join-Path $cleanBackupDir $cf) -Force }
+}
+try {
+    '{"mode":"FREE","poll_interval_min":5,"remote_access_enabled":false,"remote_port":48123,"auth_user":"admin","cpu_threshold":70,"mb_threshold":50,"space_threshold_pct":10,"language":"RU","popup_alert_enabled":true,"popup_repeat_min":60}' | Set-Content "config.json" -Encoding UTF8
+    '{"language":"ru","nodes":[],"telegram":{"enabled":false,"notify_on_crit":true,"notify_on_offline":true}}' | Set-Content "hub_config.json" -Encoding UTF8
+    '[]' | Set-Content "nodes.json" -Encoding UTF8
 Set-Location "C:\CoreGuard"
 
 # 0. Останавливаем работающие экземпляры и службу, чтобы освободить .exe и .lock
@@ -112,3 +122,10 @@ Remove-Item $distDir -Recurse -Force
 
 Write-Host "`n[DONE] Build v$newVersion (x64) completed:" -ForegroundColor Green
 Get-Item $setupPath, $zipPath | Select-Object Name, Length, LastWriteTime
+} finally {
+    foreach ($cf in @("config.json", "hub_config.json", "nodes.json")) {
+        $bak = Join-Path $cleanBackupDir $cf
+        if (Test-Path $bak) { Copy-Item $bak $cf -Force }
+    }
+    Remove-Item $cleanBackupDir -Recurse -Force -ErrorAction SilentlyContinue
+}
