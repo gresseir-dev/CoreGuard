@@ -1,0 +1,957 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CoreGuard — Нативный мониторинг оборудования и накопителей Windows</title>
+  <meta name="description" content="CoreGuard — лёгкий нативный агент мониторинга SMART, температур и сбоев Windows без зависимостей. Центральный хаб, автономные тревоги и проактивный контроль парка ПК Windows.">
+  <style>
+    :root {
+      --bg-main: #090d16;
+      --bg-secondary: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.55);
+      --card-bg-solid: #162033;
+      --border: rgba(148, 163, 184, 0.14);
+      --border-accent: rgba(59, 130, 246, 0.45);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Arial, sans-serif;
+      background-color: var(--bg-main);
+      background-image:
+        radial-gradient(circle at 15% 10%, rgba(59, 130, 246, 0.12), transparent 35%),
+        radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.08), transparent 40%),
+        linear-gradient(rgba(148, 163, 184, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.03) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 36px 36px, 36px 36px;
+      color: var(--text-main);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .container {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(9, 13, 22, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 70px;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      font-size: 19px;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-badge {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+    }
+
+    .brand small {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      line-height: 1.1;
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 26px;
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    nav a:hover { color: var(--text-main); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      border: 1px solid transparent;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 4px 18px rgba(59, 130, 246, 0.35);
+    }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-outline {
+      background: rgba(30, 41, 59, 0.65);
+      border-color: var(--border);
+      color: var(--text-main);
+    }
+    .btn-outline:hover {
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.12);
+    }
+
+    .btn-lg {
+      padding: 14px 24px;
+      font-size: 15px;
+      border-radius: 12px;
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 72px 0 64px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.08fr 0.92fr;
+      gap: 44px;
+      align-items: center;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      color: #93c5fd;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+
+    .pill-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
+
+    h1 {
+      font-size: clamp(32px, 4.2vw, 48px);
+      line-height: 1.15;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 20px;
+    }
+
+    h1 span {
+      background: linear-gradient(90deg, #60a5fa, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-sub {
+      font-size: 17px;
+      color: var(--text-muted);
+      margin-bottom: 28px;
+      max-width: 580px;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+
+    .hero-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      padding-top: 22px;
+      border-top: 1px solid var(--border);
+    }
+
+    .metric-item strong {
+      display: block;
+      font-size: 20px;
+      font-weight: 800;
+      color: #fff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .metric-item span {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Live Telemetry Mockup */
+    .mockup-window {
+      background: var(--card-bg-solid);
+      border: 1px solid var(--border-accent);
+      border-radius: 16px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.65), 0 0 40px rgba(59, 130, 246, 0.15);
+      overflow: hidden;
+    }
+
+    .mockup-bar {
+      background: rgba(15, 23, 42, 0.95);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .dots { display: flex; gap: 6px; }
+    .dots span { width: 10px; height: 10px; border-radius: 50%; background: #334155; }
+    .dots span:nth-child(1) { background: #ef4444; }
+    .dots span:nth-child(2) { background: #f59e0b; }
+    .dots span:nth-child(3) { background: #10b981; }
+
+    .mockup-body {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .mock-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .mock-card {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+
+    .mock-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .badge {
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: ui-monospace, monospace;
+    }
+    .badge-ok { background: rgba(16, 185, 129, 0.16); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); }
+    .badge-crit { background: rgba(239, 68, 68, 0.16); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+
+    .mock-val {
+      font-size: 22px;
+      font-weight: 800;
+      font-family: ui-monospace, monospace;
+    }
+
+    .mock-alert-box {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.16), rgba(15, 23, 42, 0.95));
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 12.5px;
+    }
+
+    .mock-alert-title {
+      color: #fca5a5;
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mock-alert-contacts {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed rgba(248, 113, 113, 0.35);
+      color: #e2e8f0;
+      font-family: ui-monospace, monospace;
+      font-size: 11.5px;
+    }
+
+    /* Section Headings */
+    section {
+      padding: 72px 0;
+    }
+
+    .section-head {
+      text-align: center;
+      max-width: 720px;
+      margin: 0 auto 48px;
+    }
+
+    .section-tag {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #60a5fa;
+      margin-bottom: 10px;
+    }
+
+    h2 {
+      font-size: clamp(26px, 3.2vw, 36px);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 14px;
+    }
+
+    .section-desc {
+      color: var(--text-muted);
+      font-size: 16px;
+    }
+
+    /* Feature Grid */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 22px;
+    }
+
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 26px;
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .feature-card:hover {
+      border-color: var(--border-accent);
+      transform: translateY(-2px);
+    }
+
+    .icon-box {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: rgba(59, 130, 246, 0.14);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-bottom: 16px;
+    }
+
+    .feature-card h3 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .feature-card p {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    /* Comparison Table */
+    .table-wrap {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background: rgba(15, 23, 42, 0.8);
+      color: #cbd5e1;
+      font-weight: 700;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .col-highlight {
+      background: rgba(59, 130, 246, 0.08);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* Single Window B2B Block */
+    .one-window-banner {
+      background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.7));
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      border-radius: 22px;
+      padding: 44px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .one-window-banner::before {
+      content: "";
+      position: absolute;
+      top: -80px;
+      right: -80px;
+      width: 260px;
+      height: 260px;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.16), transparent 70%);
+      pointer-events: none;
+    }
+
+    .ow-list {
+      list-style: none;
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 14px;
+      color: #cbd5e1;
+    }
+
+    .ow-list li::before {
+      content: "✓ ";
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    /* Plans / Engagement */
+    .plan-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .plan-card.featured {
+      border-color: rgba(59, 130, 246, 0.6);
+      background: linear-gradient(180deg, rgba(30, 58, 138, 0.22), rgba(15, 23, 42, 0.8));
+    }
+
+    .plan-tag {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #60a5fa;
+      margin-bottom: 6px;
+    }
+
+    .plan-title {
+      font-size: 21px;
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+
+    .plan-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 18px;
+    }
+
+    /* Footer / Contacts */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 56px 0 40px;
+      background: rgba(9, 13, 22, 0.9);
+    }
+
+    .contact-box {
+      background: var(--card-bg-solid);
+      border: 1px solid var(--border-accent);
+      border-radius: 18px;
+      padding: 36px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 32px;
+      align-items: center;
+      margin-bottom: 36px;
+    }
+
+    .contact-links {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .copy-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #10b981;
+      color: #052e16;
+      font-weight: 700;
+      padding: 12px 18px;
+      border-radius: 10px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 999;
+    }
+    .copy-toast.show { opacity: 1; }
+
+    @media (max-width: 920px) {
+      .hero-grid, .grid-3, .grid-2, .contact-box {
+        grid-template-columns: 1fr;
+      }
+      nav { display: none; }
+      .one-window-banner { padding: 26px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="container nav-wrap">
+      <a href="#" class="brand">
+        <div class="brand-badge">🛡️</div>
+        <div>
+          CoreGuard
+          <small>Нативный мониторинг оборудования Windows</small>
+        </div>
+      </a>
+
+      <nav>
+        <a href="#features">Возможности CoreGuard</a>
+        <a href="#compare">Почему не Zabbix</a>
+        <a href="#services">Внедрение и сопровождение</a>
+        <a href="#formats">Форматы работы</a>
+        <a href="#contacts">Контакты</a>
+      </nav>
+
+      <div style="display:flex; gap:10px;">
+        <a href="https://github.com/gresseir-dev/CoreGuard/releases" target="_blank" rel="noopener" class="btn btn-primary">
+          ⬇ Скачать релиз
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container hero-grid">
+      <div>
+        <div class="pill">
+          <span class="pill-dot"></span>
+          <span>Open Source (GNU GPLv3) • Нативный Go + WinAPI</span>
+        </div>
+        <h1>
+          Предсказываем сбои ПК до того, как <span>встанет офис</span>
+        </h1>
+        <p class="hero-sub">
+          <strong>CoreGuard</strong> — лёгкий нативный агент и центральный хаб для мониторинга SMART накопителей, температур и критических сбоев Windows (5–200 машин). Бесплатный инструмент с открытым исходным кодом для системных администраторов, выездных инженеров и офисов с парком от 5 до 200 компьютеров.
+        </p>
+
+        <div class="hero-actions">
+          <a href="https://github.com/gresseir-dev/CoreGuard/releases" target="_blank" rel="noopener" class="btn btn-primary btn-lg">
+            ⬇ Скачать CoreGuard для Windows
+          </a>
+          <a href="#services" class="btn btn-outline btn-lg">
+            🛠️ Внедрение и IT-поддержка
+          </a>
+        </div>
+
+        <div class="hero-metrics">
+          <div class="metric-item">
+            <strong>~8 МБ</strong>
+            <span>Один автономный .exe без DLL и Python</span>
+          </div>
+          <div class="metric-item">
+            <strong>0 байт</strong>
+            <span>Телеметрии в чужие облака — всё в вашей LAN</span>
+          </div>
+          <div class="metric-item">
+            <strong>2 мин</strong>
+            <span>Развёртывание на офисную сеть</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live UI Preview -->
+      <div class="mockup-window">
+        <div class="mockup-bar">
+          <div class="dots"><span></span><span></span><span></span></div>
+          <span>CoreGuard Agent • WORKSTATION-BUH01</span>
+          <span style="color:#34d399;">● ONLINE</span>
+        </div>
+        <div class="mockup-body">
+          <div class="mock-row">
+            <div class="mock-card">
+              <div class="mock-card-head">
+                <span>Температура ЦП</span>
+                <span class="badge badge-ok">В НОРМЕ</span>
+              </div>
+              <div class="mock-val" style="color:#34d399;">46°C</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Порог тревоги: 75°C</div>
+            </div>
+            <div class="mock-card">
+              <div class="mock-card-head">
+                <span>NVMe Samsung 980</span>
+                <span class="badge badge-ok">SMART OK</span>
+              </div>
+              <div class="mock-val">39°C</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Ресурс: 96% • 4 120 ч</div>
+            </div>
+          </div>
+
+          <div class="mock-alert-box">
+            <div class="mock-alert-title">
+              🚨 Автономное окно тревоги (поверх всех окон)
+            </div>
+            <div style="color:#cbd5e1;">
+              На ПК <strong>[SERVER-1C]</strong> обнаружена деградация накопителя PhysicalDrive1 (Reallocated Sectors: 148).
+            </div>
+            <div class="mock-alert-contacts">
+              Срочно свяжитесь с IT-специалистом:<br>
+              • Инженер: IT-отдел (Сергей / Алексей)<br>
+              • Тел: +7 (999) 000-00-00 • Telegram: @it_support
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CoreGuard Features -->
+  <section id="features">
+    <div class="container">
+      <div class="section-head">
+        <div class="section-tag">Флагманский инструмент</div>
+        <h2>Что умеет CoreGuard «из коробки»</h2>
+        <p class="section-desc">
+          Спроектирован практикующими системными инженерами: только реальные предвестники аппаратных аварий без перегруженных интерфейсов и ложных срабатываний антивирусов.
+        </p>
+      </div>
+
+      <div class="grid-3">
+        <div class="feature-card">
+          <div class="icon-box">💾</div>
+          <h3>Прямой SMART через WinAPI</h3>
+          <p>Чтение реальных атрибутов NVMe и SATA напрямую через драйверы Windows: температура контроллера, переназначенные сектора, износ ячеек, наработка в часах и ошибки интерфейса.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="icon-box">🔔</div>
+          <h3>Неигнорируемые тревоги для пользователя</h3>
+          <p>Даже если ПК работает автономно без сервера, при критическом сбое поверх всех окон всплывает системное уведомление с причиной аварии и контактами вашего IT-специалиста.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="icon-box">🖥️</div>
+          <h3>Центральный Хаб + Telegram</h3>
+          <p>Единая панель мониторинга всего офиса в локальной сети с мгновенными уведомлениями в Telegram при перегреве, нехватке места на диске C: или падении узла.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="icon-box">🛡️</div>
+          <h3>Безопасность без RAT-функций</h3>
+          <p>Агент не содержит скрытого VNC или удалённого шелла, поэтому не вызывает подозрений у Windows Defender, Kaspersky и Dr.Web. Доступ защищён Basic Auth и IP Whitelist.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="icon-box">⚡</div>
+          <h3>Аварийный триггер бэкапа</h3>
+          <p>При фиксации критического состояния накопителя агент способен автоматически запустить ваш сценарий резервного копирования баз 1С и документов до полного отказа диска.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="icon-box">🔓</div>
+          <h3>Открытый код (GNU GPLv3)</h3>
+          <p>Никаких платных подписок, закрытых облаков и привязки к серверам вендора. Исходный код и готовые инсталляторы доступны для аудита и свободного использования на GitHub.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison -->
+  <section id="compare" style="padding-top: 20px;">
+    <div class="container">
+      <div class="section-head">
+        <div class="section-tag">Инженерный подход</div>
+        <h2>Почему для офиса до 200 ПК выбирают CoreGuard</h2>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Критерий</th>
+              <th class="col-highlight">CoreGuard (Go + WinAPI)</th>
+              <th>Zabbix / Prometheus</th>
+              <th>Облачные RMM-комбайны</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Время запуска в офисе</td>
+              <td class="col-highlight">2–5 минут (один .exe инсталлятор)</td>
+              <td>От 1–2 дней на сервер, шаблоны и агенты</td>
+              <td>Регистрация, привязка к облаку вендора</td>
+            </tr>
+            <tr>
+              <td>Требования к серверу</td>
+              <td class="col-highlight">Не нужен (Хаб работает на любом ПК админа)</td>
+              <td>Выделенный Linux-сервер + БД</td>
+              <td>Постоянный доступ в интернет</td>
+            </tr>
+            <tr>
+              <td>Конфиденциальность данных</td>
+              <td class="col-highlight">100% внутри вашей локальной сети</td>
+              <td>100% внутри периметра</td>
+              <td>Телеметрия уходит на внешние серверы</td>
+            </tr>
+            <tr>
+              <td>Уведомление сотрудника на месте</td>
+              <td class="col-highlight">Системное окно с контактами IT-отдела</td>
+              <td>Только письма/боты админу</td>
+              <td>Сложная настройка тикетов</td>
+            </tr>
+            <tr>
+              <td>Стоимость лицензии</td>
+              <td class="col-highlight">Бесплатно (GNU GPLv3)</td>
+              <td>Бесплатно, но дорогое внедрение</td>
+              <td>Подписка за каждый ПК ежемесячно</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- IT Services & Deployment -->
+  <section id="services">
+    <div class="container">
+      <div class="one-window-banner">
+        <div class="section-tag" style="color:#34d399;">Для руководителей и владельцев бизнеса</div>
+        <h2 style="max-width: 780px;">Внедрение мониторинга и IT-сопровождение инфраструктуры</h2>
+        <p class="section-desc" style="max-width: 760px; margin-bottom: 32px;">
+          CoreGuard вырос из реальной практики администрирования рабочих станций и серверов. Помимо развития самого продукта, мы помогаем организациям навести порядок в инфраструктуре, развернуть контроль состояния техники и настроить надёжное резервное копирование.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-card" style="background: rgba(9, 13, 22, 0.65);">
+            <h3>🖥️ Рабочие места, серверы и мониторинг 24/7</h3>
+            <ul class="ow-list">
+              <li>Установка CoreGuard на все ПК и серверы с круглосуточным контролем состояния</li>
+              <li>Плановая профилактика и замена дисков до внезапной остановки работы</li>
+              <li>Подготовка рабочих мест новых сотрудников и оперативная удалённая помощь</li>
+              <li>Подбор, закупка и модернизация компьютерной техники под бюджет</li>
+            </ul>
+          </div>
+
+          <div class="feature-card" style="background: rgba(9, 13, 22, 0.65);">
+            <h3>🗄️ Резервное копирование и сопровождение 1С</h3>
+            <ul class="ow-list">
+              <li>Настройка автоматических ежедневных бэкапов баз 1С и критических папок</li>
+              <li>Регулярная проверка целостности резервных копий и тестовое восстановление</li>
+              <li>Обновление конфигураций, настройка прав доступа и терминальных серверов</li>
+              <li>Защита от шифровальщиков и случайного удаления файлов сотрудниками</li>
+            </ul>
+          </div>
+
+          <div class="feature-card" style="background: rgba(9, 13, 22, 0.65);">
+            <h3>🌐 Сети, VPN между филиалами и безопасность</h3>
+            <ul class="ow-list">
+              <li>Проектирование и настройка стабильного Wi-Fi, маршрутизаторов и VLAN</li>
+              <li>Защищённое объединение офисов и удалённых сотрудников через VPN</li>
+              <li>Разграничение прав доступа, настройка антивирусной защиты и фаерволов</li>
+              <li>Резервирование интернет-каналов для бесперебойной работы офиса</li>
+            </ul>
+          </div>
+
+          <div class="feature-card" style="background: rgba(9, 13, 22, 0.65);">
+            <h3>🛠️ Профилактика сбоев и настройка систем</h3>
+            <ul class="ow-list">
+              <li>Автоматизация рутинных проверок и сценариев аварийного реагирования</li>
+              <li>Подготовка и тиражирование готовых конфигураций CoreGuard под ваш офис</li>
+              <li>Диагностика узких мест производительности серверов и рабочих мест</li>
+              <li>Прямая связь с инженером без посредников и долгих согласований</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Engagement Formats -->
+  <section id="formats" style="padding-top: 20px;">
+    <div class="container">
+      <div class="section-head">
+        <div class="section-tag">Прозрачное сотрудничество</div>
+        <h2>С чего можно начать работу с нами</h2>
+      </div>
+
+      <div class="grid-3">
+        <div class="plan-card">
+          <div>
+            <div class="plan-tag">Старт • Самостоятельно</div>
+            <div class="plan-title">CoreGuard Open Source</div>
+            <p class="plan-desc">Скачайте готовый инсталлятор с GitHub, разверните агент и Центральный Хаб в своей сети бесплатно.</p>
+            <ul class="ow-list">
+              <li>Полный функционал без ограничений</li>
+              <li>Автономные окна тревог с вашими контактами</li>
+              <li>Интеграция с Telegram</li>
+            </ul>
+          </div>
+          <div style="margin-top: 24px;">
+            <a href="https://github.com/gresseir-dev/CoreGuard/releases" target="_blank" rel="noopener" class="btn btn-outline" style="width:100%;">
+              Перейти на GitHub
+            </a>
+          </div>
+        </div>
+
+        <div class="plan-card featured">
+          <div>
+            <div class="plan-tag">Для офисов 5–50 ПК</div>
+            <div class="plan-title">Регулярное IT-сопровождение</div>
+            <p class="plan-desc">Плановая поддержка серверов и рабочих мест с круглосуточным контролем состояния через CoreGuard.</p>
+            <ul class="ow-list">
+              <li>Неограниченная удалённая поддержка сотрудников</li>
+              <li>Выезды инженера на площадку при необходимости</li>
+              <li>Контроль бэкапов 1С, сетевого оборудования и критических служб</li>
+              <li>Ежемесячный отчёт о состоянии парка техники</li>
+            </ul>
+          </div>
+          <div style="margin-top: 24px;">
+            <a href="#contacts" class="btn btn-primary" style="width:100%;">
+              Обсудить обслуживание
+            </a>
+          </div>
+        </div>
+
+        <div class="plan-card">
+          <div>
+            <div class="plan-tag">Разовый проект</div>
+            <div class="plan-title">Экспресс-аудит и настройка</div>
+            <p class="plan-desc">Диагностика состояния всех ПК и серверов, наведение порядка в сети и резервном копировании.</p>
+            <ul class="ow-list">
+              <li>Выявление умирающих SSD/HDD и узких мест</li>
+              <li>Развёртывание мониторинга и бэкапов</li>
+              <li>Понятная карта рисков для руководителя</li>
+            </ul>
+          </div>
+          <div style="margin-top: 24px;">
+            <a href="#contacts" class="btn btn-outline" style="width:100%;">
+              Заказать аудит
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contacts & Footer -->
+  <footer id="contacts">
+    <div class="container">
+      <div class="contact-box">
+        <div>
+          <div class="section-tag">Связаться напрямую с инженером</div>
+          <h2 style="margin-bottom: 12px;">Нужен мониторинг парка ПК или надёжный IT-подрядчик?</h2>
+          <p style="color: var(--text-muted); font-size: 15px;">
+            Напишите в Telegram или на почту — расскажем, как быстро развернуть CoreGuard в вашей сети, или обсудим задачи по мониторингу и сопровождению вашей IT-инфраструктуры.
+          </p>
+        </div>
+
+        <div class="contact-links">
+          <a href="https://t.me/gresseir" target="_blank" rel="noopener" class="btn btn-primary btn-lg">
+            ✈️ Написать в Telegram
+          </a>
+          <a href="https://github.com/gresseir-dev/CoreGuard" target="_blank" rel="noopener" class="btn btn-outline">
+            💻 Репозиторий на GitHub (gresseir-dev)
+          </a>
+          <button type="button" onclick="copyEmail()" class="btn btn-outline">
+            📋 Скопировать Email для связи
+          </button>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; font-size:13px; color:var(--text-muted);">
+        <span>© 2026 CoreGuard. Лицензия ПО: GNU GPLv3.</span>
+        <span>Сделано с инженерным подходом • Без лишних зависимостей</span>
+      </div>
+    </div>
+  </footer>
+
+  <div id="copy-toast" class="copy-toast">Email скопирован в буфер обмена!</div>
+
+  <script>
+    function copyEmail() {
+      const email = "coreguard.support@gmail.com"; // Замените на ваш рабочий email
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(email);
+      }
+      const toast = document.getElementById("copy-toast");
+      toast.textContent = "Скопировано: " + email;
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 2600);
+    }
+  </script>
+</body>
+</html>

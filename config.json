@@ -1,7 +1,7 @@
 {
-  "client_organization": "",
+  "client_organization": "ООО \"СубТехБурСервис\"",
   "msp_branding": {
-    "company_name": "Служба ИТ-поддержки",
+    "company_name": "Gresseir Dev",
     "support_phone": "+7 (912)-080-41-50",
     "support_telegram": "@gresseir",
     "support_email": "gresseir@mail.ru",
@@ -23,5 +23,7 @@
   "cpu_threshold": 70,
   "mb_threshold": 50,
   "space_threshold_pct": 30,
-  "language": "RU"
+  "language": "RU",
+  "popup_alert_enabled": null,
+  "popup_repeat_min": 0
 }
