@@ -193,7 +193,7 @@
             <div class="form-group"><label>Пароль</label><input type="password" id="n-pass" class="form-input" placeholder="Пароль Basic Auth"></div>
             <div class="form-group" style="grid-column: span 2; display: flex; align-items: center; padding-top: 6px;">
               <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px;">
-                <input type="checkbox" id="n-alert-offline" checked> <strong>Сервер 24/7 (Оповещать при недоступности в Telegram)</strong>
+                <input type="checkbox" id="n-alert-offline"> <strong>Сервер 24/7 (Оповещать при недоступности в Telegram)</strong>
               </label>
             </div>
           </div>
@@ -643,7 +643,7 @@
       document.getElementById('n-host').value = '';
       document.getElementById('n-user').value = 'admin';
       document.getElementById('n-pass').value = '';
-      document.getElementById('n-alert-offline').checked = true;
+      document.getElementById('n-alert-offline').checked = false;
       document.getElementById('n-id').removeAttribute('disabled');
     }
 
@@ -656,7 +656,7 @@
       document.getElementById('n-host').value = n.host;
       document.getElementById('n-user').value = n.auth_user || '';
       document.getElementById('n-pass').value = n.auth_pass || '';
-      document.getElementById('n-alert-offline').checked = n.alert_on_offline !== false;
+      document.getElementById('n-alert-offline').checked = Boolean(n.alert_on_offline);
     }
 
     function saveNodeItem() {

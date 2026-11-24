@@ -17,13 +17,14 @@
   "ip_whitelist": "",
   "backup_script": "",
   "thresholds": {
-    "1": 50
+    "1": 50,
+    "2": 50
   },
   "ignored_drives": {},
   "cpu_threshold": 70,
   "mb_threshold": 50,
   "space_threshold_pct": 30,
   "language": "RU",
-  "popup_alert_enabled": null,
-  "popup_repeat_min": 0
+  "popup_alert_enabled": true,
+  "popup_repeat_min": 60
 }

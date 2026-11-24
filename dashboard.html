@@ -472,9 +472,49 @@ function toggleRemoteControls() {
 
 
 
+async function toggleIgnoreDrive(index, ignored) {
+  if (ignored) {
+    ignoredDrives[index] = true;
+  } else {
+    delete ignoredDrives[index];
+  }
+  const payload = {
+    thresholds: driveThresholds,
+    ignored_drives: ignoredDrives,
+    ignored_drives: ignoredDrives,
+    cpu_threshold: parseInt(document.getElementById('thresh-input-cpu').value, 10) || 70,
+    mb_threshold: parseInt(document.getElementById('thresh-input-mb').value, 10) || 50,
+    space_threshold_pct: parseInt(document.getElementById('thresh-input-space-pct').value, 10) || 10,
+    poll_interval_min: parseInt(document.getElementById('cfg-poll-interval').value, 10) || 5,
+    remote_access_enabled: document.getElementById('cfg-remote-enabled').checked,
+    remote_port: parseInt(document.getElementById('cfg-remote-port').value, 10) || 48123,
+    auth_user: document.getElementById('cfg-auth-user').value.trim(),
+    auth_pass: document.getElementById('cfg-auth-pass').value.trim(),
+    ip_whitelist: document.getElementById('cfg-ip-whitelist').value.trim(),
+    backup_script: document.getElementById('cfg-backup-script').value.trim(),
+    popup_alert_enabled: document.getElementById('cfg-popup-enabled') ? document.getElementById('cfg-popup-enabled').checked : true,
+    popup_repeat_min: document.getElementById('cfg-popup-repeat') ? (parseInt(document.getElementById('cfg-popup-repeat').value, 10) || 60) : 60,
+    msp_branding: {
+      company_name: document.getElementById('cfg-support-name') ? document.getElementById('cfg-support-name').value.trim() : '',
+      support_phone: document.getElementById('cfg-support-phone') ? document.getElementById('cfg-support-phone').value.trim() : '',
+      support_telegram: document.getElementById('cfg-support-tg') ? document.getElementById('cfg-support-tg').value.trim() : ''
+    },
+    language: currentLang
+  };
+  try {
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    await refreshData();
+  } catch (e) { console.error(e); }
+}
+
 async function saveProSettings() {
   const payload = {
     thresholds: driveThresholds,
+    ignored_drives: ignoredDrives,
     cpu_threshold: parseInt(document.getElementById('thresh-input-cpu').value, 10),
     mb_threshold: parseInt(document.getElementById('thresh-input-mb').value, 10),
     space_threshold_pct: parseInt(document.getElementById('thresh-input-space-pct').value, 10),
