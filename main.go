@@ -96,7 +96,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.3.29"
+const AgentVersion = "2.3.30"
 
 const LicensePublicKeyHex = "001594263b9744110c1cbb9a968ea685e14ed9b4e44cdd860e79f4d81d8b3461"
 
@@ -1335,10 +1335,24 @@ func buildAppRouter() *http.ServeMux {
         _, _ = w.Write([]byte(`{"status":"restarting"}`))
 
         go func() {
-            time.Sleep(1 * time.Second)
-            cmd := exec.Command("cmd.exe", "/C", "ping 127.0.0.1 -n 2 > nul && start \"\" \""+exePath+"\"")
-            cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+            time.Sleep(800 * time.Millisecond)
+            pid := os.Getpid()
+            exeDir := filepath.Dir(exePath)
+            // Отвязанный скрипт ждёт полного завершения старого PID (освобождения мьютекса и порта 48123), затем запускает новый exe из его папки
+            psCmd := fmt.Sprintf(
+                "for($i=0;$i -lt 40;$i++){ if(-not (Get-Process -Id %d -ErrorAction SilentlyContinue)){ break }; Start-Sleep -Milliseconds 250 }; Start-Sleep -Milliseconds 400; Start-Process -FilePath '%s' -WorkingDirectory '%s'",
+                pid,
+                strings.ReplaceAll(exePath, "'", "''"),
+                strings.ReplaceAll(exeDir, "'", "''"),
+            )
+            cmd := exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", psCmd)
+            cmd.Dir = exeDir
+            cmd.SysProcAttr = &syscall.SysProcAttr{
+                HideWindow:    true,
+                CreationFlags: 0x00000008 | 0x00000200, // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+            }
             _ = cmd.Start()
+            time.Sleep(300 * time.Millisecond)
             os.Exit(0)
         }()
     })
