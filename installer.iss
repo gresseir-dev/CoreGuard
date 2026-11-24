@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "CoreGuard Enterprise"
-#define MyAppVersion "2.3.25"
+#define MyAppVersion "2.3.26"
 #define MyAppPublisher "CoreGuard"
 #define MyAppExeName "CoreGuard.exe"; Components: agent
 #define MyHubExeName "coreguard_hub.exe"; Components: hub
@@ -53,8 +53,7 @@ Source: "CoreGuard.exe"; DestDir: "{app}"; Flags: ignoreversion; Components: age
 Source: "coreguard_hub.exe"; DestDir: "{app}"; Flags: ignoreversion; Components: hub
 ; Конфигурационные файлы (не перезаписываются, если уже существуют)
 Source: "config.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
-Source: "hub_config.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
-Source: "nodes.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
+Source: "releases\*"; DestDir: "{app}\releases"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: hub
 ; Документация в дистрибутиве
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\CoreGuard\LICENSE"; DestDir: "{app}"; Flags: ignoreversion

@@ -125,6 +125,55 @@ func NewHubManager(settingsPath, eventsPath string) *HubManager {
     }
 }
 
+func (h *HubManager) buildDefaultLocalNode() NodeConfig {
+    port := 48123
+    user := "admin"
+    pass := ""
+
+    // Ищем config.json локального агента рядом с hub_config.json или рядом с coreguard_hub.exe
+    candidates := []string{
+        filepath.Join(filepath.Dir(h.settingsPath), "config.json"),
+        "config.json",
+    }
+    if exe, err := os.Executable(); err == nil {
+        candidates = append([]string{filepath.Join(filepath.Dir(exe), "config.json")}, candidates...)
+    }
+
+    for _, cfgPath := range candidates {
+        raw, err := os.ReadFile(cfgPath)
+        if err != nil {
+            continue
+        }
+        // Срезаем возможный UTF-8 BOM
+        raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
+        var localCfg struct {
+            RemotePort int    `json:"remote_port"`
+            AuthUser   string `json:"auth_user"`
+            AuthPass   string `json:"auth_pass"`
+        }
+        if json.Unmarshal(raw, &localCfg) == nil {
+            if localCfg.RemotePort > 0 {
+                port = localCfg.RemotePort
+            }
+            if strings.TrimSpace(localCfg.AuthUser) != "" {
+                user = strings.TrimSpace(localCfg.AuthUser)
+            }
+            pass = localCfg.AuthPass
+            break
+        }
+    }
+
+    return NodeConfig{
+        ID:             "local-pc",
+        Name:           "Локальный хост",
+        Group:          "IT Сервер",
+        Host:           fmt.Sprintf("127.0.0.1:%d", port),
+        AuthUser:       user,
+        AuthPass:       pass,
+        AlertOnOffline: true,
+    }
+}
+
 func (h *HubManager) LoadSettings() {
     h.mu.Lock()
     defer h.mu.Unlock()
@@ -132,11 +181,10 @@ func (h *HubManager) LoadSettings() {
     data, err := os.ReadFile(h.settingsPath)
     if err != nil {
         h.language = "ru"
-        h.nodes = []NodeConfig{
-            {ID: "local-pc", Name: "Локальный хост", Group: "IT Сервер", Host: "127.0.0.1:48123", AuthUser: "admin", AuthPass: "", AlertOnOffline: true},
-        }
+        h.nodes = []NodeConfig{h.buildDefaultLocalNode()}
         _ = h.saveDiskLocked()
     } else {
+        data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
         var hs HubSettings
         if err := json.Unmarshal(data, &hs); err == nil {
             if hs.Language != "" {
@@ -144,14 +192,22 @@ func (h *HubManager) LoadSettings() {
             } else {
                 h.language = "ru"
             }
-            if len(hs.Nodes) == 0 {
-                h.nodes = []NodeConfig{{ID: "local-pc", Name: "Локальный хост", Group: "IT Сервер", Host: "127.0.0.1:48123", AuthUser: "admin", AuthPass: "", AlertOnOffline: true}}
-            } else {
-                            if hs.ClientOrganization != "" { h.clientOrganization = hs.ClientOrganization }
-            h.mspBranding = hs.MspBranding
-            h.nodes = hs.Nodes
+            if hs.ClientOrganization != "" {
+                h.clientOrganization = hs.ClientOrganization
             }
+            h.mspBranding = hs.MspBranding
             h.telegram = hs.Telegram
+
+            if len(hs.Nodes) == 0 {
+                h.nodes = []NodeConfig{h.buildDefaultLocalNode()}
+                _ = h.saveDiskLocked()
+            } else {
+                h.nodes = hs.Nodes
+            }
+        } else {
+            h.language = "ru"
+            h.nodes = []NodeConfig{h.buildDefaultLocalNode()}
+            _ = h.saveDiskLocked()
         }
     }
 
