@@ -883,12 +883,36 @@ func main() {
             } else {
                 hub.language = "ru"
             }
-            if req.Nodes == nil {
-                hub.nodes = make([]NodeConfig, 0)
-            } else {
-                            hub.clientOrganization = req.ClientOrganization
+            hub.clientOrganization = req.ClientOrganization
             hub.mspBranding = req.MspBranding
-            hub.nodes = req.Nodes
+            if len(req.Nodes) == 0 {
+                hub.nodes = []NodeConfig{hub.buildDefaultLocalNode()}
+            } else {
+                // Если в существующей конфигурации был local-pc, а клиент прислал только новые узлы без него (например, со старой кэш-страницы), сохраняем local-pc
+                hasLocalInReq := false
+                for _, n := range req.Nodes {
+                    if n.ID == "local-pc" || strings.HasPrefix(n.Host, "127.0.0.1:") || strings.EqualFold(n.Host, "localhost:48123") {
+                        hasLocalInReq = true
+                        break
+                    }
+                }
+                if !hasLocalInReq {
+                    var existingLocal *NodeConfig
+                    for _, oldN := range hub.nodes {
+                        if oldN.ID == "local-pc" {
+                            cp := oldN
+                            existingLocal = &cp
+                            break
+                        }
+                    }
+                    if existingLocal != nil {
+                        hub.nodes = append([]NodeConfig{*existingLocal}, req.Nodes...)
+                    } else {
+                        hub.nodes = req.Nodes
+                    }
+                } else {
+                    hub.nodes = req.Nodes
+                }
             }
             hub.telegram = req.Telegram
             _ = hub.saveDiskLocked()

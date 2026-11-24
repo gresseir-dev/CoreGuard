@@ -565,7 +565,7 @@
         const res = await fetch('/api/nodes');
         const nodes = await res.json();
         
-        let total = 0, ok = 0, warn = 0, crit = 0;
+        let total = 0, ok = 0, warn = 0, crit = 0, outdatedCount = 0;
         updateViewToggleButtons();
         const grid = document.getElementById('nodes-grid');
         grid.innerHTML = '';
@@ -617,7 +617,7 @@
             <div class="metrics-row">
               <div>ЦП: <strong>${st.cpu_temp}°C</strong></div>
               <div>Плата: <strong>${st.mb_temp}°C</strong></div>
-              <div>Диск C:: <strong>${st.free_gb.toFixed(1)} GB</strong> (${st.free_pct.toFixed(0)}%)</div>
+              <div>Диск C:: <strong>${Number(st.free_gb || 0).toFixed(1)} GB</strong> (${Number(st.free_pct || 0).toFixed(0)}%)</div>
               <div>Накопителей: <strong>${st.drives_total}</strong> ${st.drives_crit > 0 ? `<span style="color:var(--red); font-weight:bold;">(⚠ Сбой: ${st.drives_crit})</span>` : ''}</div>
             </div>` : `
             <div style="padding: 16px 0; color: var(--text-muted); font-size: 13px; text-align: center;">
@@ -630,7 +630,7 @@
             const tr = document.createElement('tr');
             let metricsTd = st.online ? `
               <td>${st.cpu_temp}°C / ${st.mb_temp}°C</td>
-              <td>${st.free_gb.toFixed(1)} GB (${st.free_pct.toFixed(0)}%)</td>
+              <td>${Number(st.free_gb || 0).toFixed(1)} GB (${Number(st.free_pct || 0).toFixed(0)}%)</td>
               <td>${st.drives_total} шт. ${st.drives_crit > 0 ? '<span style=\"color:var(--red); font-weight:bold;\">(⚠ ' + st.drives_crit + ')</span>' : ''}</td>
             ` : `
               <td colspan=\"3\" style=\"color:var(--text-muted); font-size:12px;\">Недоступен</td>
