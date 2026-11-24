@@ -5,13 +5,18 @@ import (
     _ "embed"
     "bytes"
     "context"
+    "crypto/sha256"
     "encoding/base64"
+    "encoding/hex"
     "encoding/json"
     "fmt"
+    "io"
     "log"
+    "net"
     "net/http"
     "os"
     "path/filepath"
+    "strings"
     "sync"
     "time"
 
@@ -53,6 +58,7 @@ type NodeStatus struct {
     DrivesCrit     int        `json:"drives_crit"`
 	DriveAlerts    []string   `json:"drive_alerts,omitempty"`
     HasUnreadAlert bool       `json:"has_unread_alert"`
+    AgentVersion   string     `json:"agent_version,omitempty"`
 }
 
 type MspBranding struct {
@@ -401,7 +407,8 @@ func (h *HubManager) PollNode(node NodeConfig) *NodeStatus {
     }
 
     var outer struct {
-        Report struct {
+        Version string `json:"version"`
+        Report  struct {
             System struct {
                 CpuTemp     int     `json:"cpu_temp"`
                 CpuTempC    int     `json:"cpu_temp_c"`
@@ -432,6 +439,11 @@ func (h *HubManager) PollNode(node NodeConfig) *NodeStatus {
         return st
     }
 
+    if strings.TrimSpace(outer.Version) != "" {
+        st.AgentVersion = strings.TrimSpace(outer.Version)
+    } else {
+        st.AgentVersion = "legacy"
+    }
     rep := outer.Report
     st.Online = true
 
@@ -594,6 +606,102 @@ func (s *hubWindowsService) Execute(args []string, r <-chan svc.ChangeRequest, c
     }
 }
 
+type ReleaseManifest struct {
+    Available bool   `json:"available"`
+    Version   string `json:"version"`
+    SHA256    string `json:"sha256"`
+    BuiltAt   string `json:"built_at,omitempty"`
+    FileSize  int64  `json:"file_size"`
+    Dir       string `json:"-"`
+}
+
+func getReleasesDir() string {
+    if exe, err := os.Executable(); err == nil {
+        exeRel := filepath.Join(filepath.Dir(exe), "releases")
+        if st, err := os.Stat(exeRel); err == nil && st.IsDir() {
+            return exeRel
+        }
+        // Создаём папку рядом с exe, если ещё не создана
+        _ = os.MkdirAll(exeRel, 0755)
+        return exeRel
+    }
+    _ = os.MkdirAll("releases", 0755)
+    return "releases"
+}
+
+func loadHubReleaseInfo() ReleaseManifest {
+    relDir := getReleasesDir()
+    exeFile := filepath.Join(relDir, "CoreGuard.exe")
+    info, err := os.Stat(exeFile)
+    if err != nil || info.IsDir() || info.Size() < 1024*512 {
+        return ReleaseManifest{Available: false, Dir: relDir}
+    }
+
+    res := ReleaseManifest{
+        Available: true,
+        FileSize:  info.Size(),
+        BuiltAt:   info.ModTime().Format("2006-01-02 15:04:05"),
+        Dir:       relDir,
+    }
+
+    if raw, err := os.ReadFile(filepath.Join(relDir, "manifest.json")); err == nil {
+        var m struct {
+            Version string `json:"version"`
+            SHA256  string `json:"sha256"`
+            BuiltAt string `json:"built_at"`
+        }
+        if json.Unmarshal(raw, &m) == nil {
+            res.Version = strings.TrimSpace(m.Version)
+            res.SHA256 = strings.ToLower(strings.TrimSpace(m.SHA256))
+            if m.BuiltAt != "" {
+                res.BuiltAt = m.BuiltAt
+            }
+        }
+    }
+
+    if res.SHA256 == "" {
+        if f, err := os.Open(exeFile); err == nil {
+            h := sha256.New()
+            if _, err := io.Copy(h, f); err == nil {
+                res.SHA256 = hex.EncodeToString(h.Sum(nil))
+            }
+            _ = f.Close()
+        }
+    }
+    if res.Version == "" {
+        res.Version = "custom"
+    }
+    return res
+}
+
+func resolveHubIPForTarget(targetHostPort string) string {
+    host := targetHostPort
+    if !strings.Contains(host, ":") {
+        host = host + ":48123"
+    }
+    conn, err := net.DialTimeout("udp", host, 500*time.Millisecond)
+    if err == nil {
+        defer conn.Close()
+        if udpAddr, ok := conn.LocalAddr().(*net.UDPAddr); ok && udpAddr.IP != nil && !udpAddr.IP.IsLoopback() {
+            return udpAddr.IP.String()
+        }
+    }
+    // Fallback: первый не-loopback IPv4 интерфейс
+    if ifaces, err := net.Interfaces(); err == nil {
+        for _, iface := range ifaces {
+            if (iface.Flags&net.FlagUp) == 0 || (iface.Flags&net.FlagLoopback) != 0 {
+                continue
+            }
+            addrs, _ := iface.Addrs()
+            for _, addr := range addrs {
+                if ipNet, ok := addr.(*net.IPNet); ok && ipNet.IP.To4() != nil && !ipNet.IP.IsLoopback() {
+                    return ipNet.IP.String()
+                }
+            }
+        }
+    }
+    return "127.0.0.1"
+}
 func main() {
     // Фиксируем рабочую папку строго рядом с exe, чтобы служба не читала System32
     exePath, err := os.Executable()
@@ -762,6 +870,144 @@ func main() {
         _ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
     })
 
+    relDir := getReleasesDir()
+    mux.Handle("/releases/", http.StripPrefix("/releases/", http.FileServer(http.Dir(relDir))))
+
+    mux.HandleFunc("/api/release", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        _ = json.NewEncoder(w).Encode(loadHubReleaseInfo())
+    })
+
+    mux.HandleFunc("/api/deploy", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        if r.Method != http.MethodPost {
+            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+            return
+        }
+
+        rel := loadHubReleaseInfo()
+        if !rel.Available || rel.SHA256 == "" {
+            w.WriteHeader(http.StatusBadRequest)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{
+                "error": "В папке releases/ Хаба не найден файл CoreGuard.exe",
+            })
+            return
+        }
+
+        var req struct {
+            NodeIDs     []string `json:"node_ids"`
+            AllOutdated bool     `json:"all_outdated"`
+        }
+        _ = json.NewDecoder(r.Body).Decode(&req)
+
+        targetSet := make(map[string]bool)
+        for _, id := range req.NodeIDs {
+            targetSet[id] = true
+        }
+
+        hub.mu.RLock()
+        var targets []NodeConfig
+        for _, n := range hub.nodes {
+            st := hub.states[n.ID]
+            if req.AllOutdated {
+                if st != nil && st.Online && st.AgentVersion != rel.Version {
+                    targets = append(targets, n)
+                }
+            } else if targetSet[n.ID] {
+                targets = append(targets, n)
+            }
+        }
+        hub.mu.RUnlock()
+
+        type deployItemResult struct {
+            NodeID   string `json:"node_id"`
+            NodeName string `json:"node_name"`
+            Success  bool   `json:"success"`
+            Message  string `json:"message"`
+        }
+
+        results := make([]deployItemResult, 0, len(targets))
+        var wg sync.WaitGroup
+        var resMu sync.Mutex
+
+        for _, node := range targets {
+            wg.Add(1)
+            go func(n NodeConfig) {
+                defer wg.Done()
+                hubIP := resolveHubIPForTarget(n.Host)
+                if strings.HasPrefix(n.Host, "127.0.0.1") || strings.HasPrefix(strings.ToLower(n.Host), "localhost") {
+                    hubIP = "127.0.0.1"
+                }
+                downloadURL := fmt.Sprintf("http://%s:9090/releases/CoreGuard.exe", hubIP)
+
+                payloadBytes, _ := json.Marshal(map[string]string{
+                    "version": rel.Version,
+                    "url":     downloadURL,
+                    "sha256":  rel.SHA256,
+                })
+
+                updateURL := fmt.Sprintf("http://%s/api/update", n.Host)
+                httpReq, err := http.NewRequest(http.MethodPost, updateURL, bytes.NewReader(payloadBytes))
+                if err != nil {
+                    resMu.Lock()
+                    results = append(results, deployItemResult{NodeID: n.ID, NodeName: n.Name, Success: false, Message: err.Error()})
+                    resMu.Unlock()
+                    return
+                }
+                httpReq.Header.Set("Content-Type", "application/json")
+                if n.AuthUser != "" || n.AuthPass != "" {
+                    auth := base64.StdEncoding.EncodeToString([]byte(n.AuthUser + ":" + n.AuthPass))
+                    httpReq.Header.Set("Authorization", "Basic "+auth)
+                }
+
+                client := &http.Client{Timeout: 30 * time.Second}
+                resp, err := client.Do(httpReq)
+                if err != nil {
+                    resMu.Lock()
+                    results = append(results, deployItemResult{NodeID: n.ID, NodeName: n.Name, Success: false, Message: "Ошибка связи: " + err.Error()})
+                    resMu.Unlock()
+                    return
+                }
+                bodyBytes, _ := io.ReadAll(resp.Body)
+                _ = resp.Body.Close()
+
+                resMu.Lock()
+                if resp.StatusCode == http.StatusOK {
+                    results = append(results, deployItemResult{
+                        NodeID:   n.ID,
+                        NodeName: n.Name,
+                        Success:  true,
+                        Message:  fmt.Sprintf("Обновление до v%s запущено (перезапуск агента)", rel.Version),
+                    })
+                } else {
+                    errMsg := strings.TrimSpace(string(bodyBytes))
+                    if errMsg == "" {
+                        errMsg = fmt.Sprintf("HTTP %d", resp.StatusCode)
+                    }
+                    results = append(results, deployItemResult{
+                        NodeID:   n.ID,
+                        NodeName: n.Name,
+                        Success:  false,
+                        Message:  errMsg,
+                    })
+                }
+                resMu.Unlock()
+            }(node)
+        }
+        wg.Wait()
+
+        // Через 4 секунды запускаем внеочередной опрос узлов, чтобы в таблице Хаба обновилась версия
+        go func() {
+            time.Sleep(4 * time.Second)
+            hub.TriggerPoll()
+        }()
+
+        w.Header().Set("Content-Type", "application/json")
+        _ = json.NewEncoder(w).Encode(map[string]interface{}{
+            "target_version": rel.Version,
+            "results":        results,
+        })
+    })
     mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Content-Type", "text/html; charset=utf-8")
         _, _ = w.Write(hubDashboardHTML)

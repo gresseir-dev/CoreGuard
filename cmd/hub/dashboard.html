@@ -100,6 +100,8 @@
       <button class="btn btn-alert" id="btn-events-open" onclick="openEventsModal()">
         🔔 Журнал тревог <span class="unread-pill" id="unread-count-pill">0</span>
       </button>
+      <span id="hub-release-badge" title="Версия CoreGuard.exe в папке releases/ Хаба" style="font-size:12px; padding:5px 9px; border-radius:6px; background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.3); color:#93c5fd; font-weight:600;">📦 Релиз: —</span>
+      <button class="btn" id="btn-deploy-all" style="display:none; background:#d97706; color:#fff;" onclick="deployAllOutdated()">🚀 Обновить устаревшие (0)</button>
       <button class="btn btn-secondary" onclick="openConfigModal()">⚙ Настройки & Узлы</button>
     </div>
   </div>
@@ -314,6 +316,89 @@
       }
     }
 
+    let latestRelease = { available: false, version: '', built_at: '' };
+
+    async function fetchReleaseInfo() {
+      try {
+        const res = await fetch('/api/release?_t=' + Date.now());
+        if (!res.ok) return;
+        latestRelease = await res.json();
+        const badge = document.getElementById('hub-release-badge');
+        if (badge) {
+          if (latestRelease.available && latestRelease.version) {
+            badge.innerText = '📦 Релиз: v' + latestRelease.version;
+            badge.title = 'Файл releases/CoreGuard.exe (собран: ' + (latestRelease.built_at || '—') + ')';
+            badge.style.color = '#93c5fd';
+          } else {
+            badge.innerText = '📦 releases/ пуст';
+            badge.title = 'Положите CoreGuard.exe в папку releases/ рядом с coreguard_hub.exe';
+            badge.style.color = '#94a3b8';
+          }
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    function renderVersionBadge(agentVer, isOnline) {
+      if (!isOnline) return '';
+      const v = (agentVer && agentVer !== 'legacy') ? ('v' + agentVer) : 'legacy';
+      const isActual = latestRelease.available && agentVer && agentVer === latestRelease.version;
+      const bg = isActual ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.18)';
+      const border = isActual ? 'rgba(16,185,129,0.4)' : 'rgba(245,158,11,0.45)';
+      const color = isActual ? '#6ee7b7' : '#fcd34d';
+      const title = isActual ? 'Актуальная версия агента' : (latestRelease.available ? ('Доступно обновление до v' + latestRelease.version) : 'Версия агента');
+      return `<span title="${title}" style="display:inline-block; margin-left:6px; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:600; background:${bg}; border:1px solid ${border}; color:${color};">${v}</span>`;
+    }
+
+    function renderNodeDeployBtn(st, compact) {
+      if (!st.online || !latestRelease.available || !latestRelease.version) return '';
+      if (st.agent_version === latestRelease.version) return '';
+      const label = compact ? `⬆️ v${latestRelease.version}` : `⬆️ Обновить до v${latestRelease.version}`;
+      return `<button type="button" onclick="deploySingleNode('${st.config.id}', '${st.config.name.replace(/'/g, "\\'")}')" style="background:rgba(217,119,6,0.22); border:1px solid rgba(245,158,11,0.5); color:#fcd34d; border-radius:5px; padding:2px 8px; font-size:11px; font-weight:600; cursor:pointer; margin-right:8px;">${label}</button>`;
+    }
+
+    async function deploySingleNode(nodeId, nodeName) {
+      if (!latestRelease.available) return alert('В папке releases/ Хаба отсутствует файл CoreGuard.exe');
+      if (!confirm(`Обновить агент на «${nodeName}» до версии v${latestRelease.version}?\nАгент скачает бинарник с Хаба и перезапустится за 1–2 секунды.`)) return;
+      try {
+        const res = await fetch('/api/deploy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ node_ids: [nodeId] })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Ошибка запуска обновления');
+        const item = (data.results || [])[0];
+        alert(item ? `${item.node_name}: ${item.message}` : 'Команда обновления отправлена');
+        setTimeout(loadHub, 4500);
+      } catch (e) { alert('Ошибка сети: ' + e); }
+    }
+
+    async function deployAllOutdated() {
+      if (!latestRelease.available) return alert('В папке releases/ Хаба отсутствует файл CoreGuard.exe');
+      if (!confirm(`Запустить массовое обновление всех устаревших онлайн-агентов до v${latestRelease.version}?`)) return;
+      const btn = document.getElementById('btn-deploy-all');
+      if (btn) { btn.disabled = true; btn.innerText = '⏳ Раскатка...'; }
+      try {
+        const res = await fetch('/api/deploy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ all_outdated: true })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || 'Ошибка массового обновления');
+        } else {
+          const lines = (data.results || []).map(r => `${r.success ? '✅' : '❌'} ${r.node_name}: ${r.message}`);
+          alert(lines.length > 0 ? lines.join('\n') : 'Нет доступных узлов для обновления');
+        }
+        setTimeout(loadHub, 4500);
+      } catch (e) {
+        alert('Ошибка сети: ' + e);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
     async function loadHub() {
       try {
         const res = await fetch('/api/nodes');
@@ -359,6 +444,9 @@
           if (st.overall === 'HEALTHY') ok++;
           else if (st.overall === 'WARNING') warn++;
           else if (st.overall === 'CRITICAL') crit++;
+          if (st.online && latestRelease.available && latestRelease.version && st.agent_version !== latestRelease.version) {
+            outdatedCount++;
+          }
 
           const card = document.createElement('div');
           card.className = 'node-card';
@@ -389,13 +477,13 @@
             let isSrv = (st.config.alert_on_offline !== false) ? '<span style=\"color:var(--blue);font-size:11px;\">🖥 Сервер</span>' : '<span style=\"color:var(--text-muted);font-size:11px;\">💻 ПК</span>';
             tr.innerHTML = `
               <td><span class=\"badge badge-${st.overall}\">${st.overall}</span></td>
-              <td><strong>${st.config.name}</strong> ${incidentPill}</td>
+              <td><strong>${st.config.name}</strong>${renderVersionBadge(st.agent_version, st.online)} ${incidentPill}</td>
               <td>${st.config.group}</td>
               <td><code>${st.config.host}</code></td>
               <td>${isSrv}</td>
               ${metricsTd}
               <td style=\"font-size:12px; color:var(--text-muted);\">${st.last_seen}</td>
-              <td><a href=\"http://${st.config.host}\" target=\"_blank\" style=\"color:var(--blue); text-decoration:none; font-size:12px;\">Открыть ↗</a></td>
+              <td>${renderNodeDeployBtn(st, true)}<a href=\"http://${st.config.host}\" target=\"_blank\" style=\"color:var(--blue); text-decoration:none; font-size:12px;\">Открыть ↗</a></td>
             `;
             tableTbody.appendChild(tr);
             continue;
@@ -404,7 +492,7 @@
           card.innerHTML = `
             <div class="node-top">
               <div>
-                <div class="node-name">${st.config.name} ${incidentPill}</div>
+                <div class="node-name">${st.config.name}${renderVersionBadge(st.agent_version, st.online)} ${incidentPill}</div>
                 <div class="node-group">${st.config.group} • ${st.config.host}</div>
               </div>
               <span class="badge badge-${st.overall}">${st.overall}</span>
@@ -412,7 +500,7 @@
             ${content}${(st.drive_alerts && st.drive_alerts.length > 0) ? `<div style="margin-top:10px; padding:8px 10px; background:rgba(239,68,68,0.14); border:1px solid rgba(239,68,68,0.4); border-radius:6px; color:#fca5a5; font-size:12px; line-height:1.4;">⚠️ <strong>Сбой SMART:</strong><br>${st.drive_alerts.join('<br>')}</div>` : ''}
             <div class="node-footer">
               <span>Срез: ${st.last_seen}</span>
-              <a href="http://${st.config.host}" target="_blank" style="color:var(--blue); text-decoration:none;">Открыть ПК ↗</a>
+              <div>${renderNodeDeployBtn(st, false)}<a href="http://${st.config.host}" target="_blank" style="color:var(--blue); text-decoration:none;">Открыть ПК ↗</a></div>
             </div>
           `;
           grid.appendChild(card);

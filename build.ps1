@@ -46,6 +46,11 @@ $iss = $iss -replace '#define\s+MyAppVersion\s+"[^"]+"', "#define MyAppVersion `
 $iss = $iss -replace 'OutputBaseFilename=CoreGuard_Setup_v\{#MyAppVersion\}(_x64)?', 'OutputBaseFilename=CoreGuard_Setup_v{#MyAppVersion}_x64'
 
 [System.IO.File]::WriteAllText($issPath, $iss, (New-Object System.Text.UTF8Encoding $false))
+if (Test-Path "C:\CoreGuard\main.go") {
+    $mCode = [System.IO.File]::ReadAllText("C:\CoreGuard\main.go", [System.Text.Encoding]::UTF8)
+    $mCode = $mCode -replace 'const AgentVersion = "[^"]+"', "const AgentVersion = `"$newVersion`""
+    [System.IO.File]::WriteAllText("C:\CoreGuard\main.go", $mCode, (New-Object System.Text.UTF8Encoding $false))
+}
 
 # 2. Зачистка тестовых логов и блокировок перед сборкой
 $cleanTargets = @(
@@ -72,6 +77,19 @@ if (Test-Path "C:\CoreGuardBackup\main.go") {
     Pop-Location
 }
     if ($LASTEXITCODE -ne 0) { throw "Agent build failed!" }
+
+    $relDir = "C:\CoreGuard\releases"
+    New-Item -ItemType Directory -Path $relDir -Force | Out-Null
+    Copy-Item "C:\CoreGuard\CoreGuard.exe" (Join-Path $relDir "CoreGuard.exe") -Force
+    $sha = (Get-FileHash (Join-Path $relDir "CoreGuard.exe") -Algorithm SHA256).Hash.ToLower()
+    $manifestObj = [ordered]@{
+        version  = $newVersion
+        sha256   = $sha
+        built_at = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+    }
+    $manifest = $manifestObj | ConvertTo-Json -Compress
+    [System.IO.File]::WriteAllText((Join-Path $relDir "manifest.json"), $manifest, (New-Object System.Text.UTF8Encoding $false))
+    Write-Host "[OK] Updated releases/CoreGuard.exe (v$newVersion, SHA256: $sha)" -ForegroundColor Green
 
     Write-Host "[2/3] Compiling coreguard_hub.exe (x64)..." -ForegroundColor Yellow
     Push-Location "C:\CoreGuard\cmd\hub"
@@ -113,6 +131,10 @@ $releaseFiles = @(
 )
 foreach ($f in $releaseFiles) {
     if (Test-Path $f) { Copy-Item $f -Destination $distDir }
+}
+
+if (Test-Path "C:\CoreGuard\releases") {
+    Copy-Item "C:\CoreGuard\releases" -Destination (Join-Path $distDir "releases") -Recurse -Force
 }
 
 $zipPath = "C:\CoreGuard\CoreGuard_Enterprise_v${newVersion}_x64_Release.zip"

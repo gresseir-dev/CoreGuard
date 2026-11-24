@@ -5,12 +5,14 @@ import (
     "bytes"
     "context"
     "crypto/ed25519"
+    "crypto/sha256"
     "crypto/subtle"
     _ "embed"
     "encoding/base64"
     "encoding/hex"
     "encoding/json"
     "flag"
+    "io"
     "fmt"
     "net"
     "net/http"
@@ -93,6 +95,8 @@ var embeddedDashboard []byte
 
 //go:embed app.ico
 var embeddedIcon []byte
+
+const AgentVersion = "2.3.23"
 
 const LicensePublicKeyHex = "001594263b9744110c1cbb9a968ea685e14ed9b4e44cdd860e79f4d81d8b3461"
 
@@ -1113,6 +1117,7 @@ func buildAppRouter() *http.ServeMux {
         }
 
         respData := map[string]interface{}{
+            "version": AgentVersion,
             "report":              globalReport,
             "history":             history,
             "config":              globalConfig,
@@ -1255,6 +1260,87 @@ func buildAppRouter() *http.ServeMux {
         default:
             http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
         }
+    })
+    mux.HandleFunc("/api/update", func(w http.ResponseWriter, r *http.Request) {
+        if r.Method != http.MethodPost {
+            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+            return
+        }
+        var req struct {
+            Version string `json:"version"`
+            URL     string `json:"url"`
+            SHA256  string `json:"sha256"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" || req.SHA256 == "" {
+            http.Error(w, "Invalid update payload", http.StatusBadRequest)
+            return
+        }
+
+        exePath, err := os.Executable()
+        if err != nil {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+            return
+        }
+        newPath := exePath + ".new"
+        oldPath := exePath + ".old"
+
+        client := &http.Client{Timeout: 45 * time.Second}
+        resp, err := client.Get(req.URL)
+        if err != nil {
+            http.Error(w, "Download failed: "+err.Error(), http.StatusBadGateway)
+            return
+        }
+        defer resp.Body.Close()
+
+        if resp.StatusCode != http.StatusOK {
+            http.Error(w, fmt.Sprintf("Download HTTP %d", resp.StatusCode), http.StatusBadGateway)
+            return
+        }
+
+        out, err := os.Create(newPath)
+        if err != nil {
+            http.Error(w, "Temp file error: "+err.Error(), http.StatusInternalServerError)
+            return
+        }
+
+        hasher := sha256.New()
+        written, err := io.Copy(io.MultiWriter(out, hasher), resp.Body)
+        _ = out.Close()
+        if err != nil || written < 1024*1024 {
+            _ = os.Remove(newPath)
+            http.Error(w, "Corrupted or incomplete download", http.StatusBadGateway)
+            return
+        }
+
+        actualHash := hex.EncodeToString(hasher.Sum(nil))
+        if !strings.EqualFold(actualHash, strings.TrimSpace(req.SHA256)) {
+            _ = os.Remove(newPath)
+            http.Error(w, "SHA256 mismatch", http.StatusUnprocessableEntity)
+            return
+        }
+
+        _ = os.Remove(oldPath)
+        if err := os.Rename(exePath, oldPath); err != nil {
+            _ = os.Remove(newPath)
+            http.Error(w, "Rename current failed: "+err.Error(), http.StatusInternalServerError)
+            return
+        }
+        if err := os.Rename(newPath, exePath); err != nil {
+            _ = os.Rename(oldPath, exePath)
+            http.Error(w, "Activate new failed: "+err.Error(), http.StatusInternalServerError)
+            return
+        }
+
+        w.Header().Set("Content-Type", "application/json")
+        _, _ = w.Write([]byte(`{"status":"restarting"}`))
+
+        go func() {
+            time.Sleep(1 * time.Second)
+            cmd := exec.Command("cmd.exe", "/C", "ping 127.0.0.1 -n 2 > nul && start \"\" \""+exePath+"\"")
+            cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+            _ = cmd.Start()
+            os.Exit(0)
+        }()
     })
     mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1440,6 +1526,9 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
 }
 
 func main() {
+    if exe, err := os.Executable(); err == nil {
+        _ = os.Remove(exe + ".old")
+    }
     runtime.LockOSThread()
 
     if !acquireSingleInstanceGuard() {
