@@ -100,12 +100,45 @@
       <button class="btn btn-alert" id="btn-events-open" onclick="openEventsModal()">
         🔔 Журнал тревог <span class="unread-pill" id="unread-count-pill">0</span>
       </button>
-      <span id="hub-release-badge" title="Версия CoreGuard.exe в папке releases/ Хаба" style="font-size:12px; padding:5px 9px; border-radius:6px; background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.3); color:#93c5fd; font-weight:600;">📦 Релиз: —</span>
-      <button class="btn" id="btn-deploy-all" style="display:none; background:#d97706; color:#fff;" onclick="deployAllOutdated()">🚀 Обновить устаревшие (0)</button>
+      <div id="release-menu-wrap" style="position:relative; display:inline-block;">
+        <button type="button" class="btn btn-secondary" id="hub-release-badge" onclick="toggleReleaseMenu(event)" style="border-color:rgba(59,130,246,0.45); color:#93c5fd; font-weight:600;">📦 Релиз: — ▾</button>
+        <div id="release-dropdown" style="display:none; position:absolute; right:0; top:calc(100% + 6px); min-width:270px; background:#0f172a; border:1px solid var(--border); border-radius:8px; box-shadow:0 12px 30px rgba(0,0,0,0.55); z-index:1200; padding:6px;">
+          <div id="rel-menu-info" style="padding:8px 10px; font-size:11px; color:var(--text-muted); border-bottom:1px solid var(--border); margin-bottom:4px; line-height:1.45;">
+            Локальный пакет: проверка...
+          </div>
+          <button type="button" id="btn-check-github" onclick="closeReleaseMenu(); checkGithubRelease(true);" style="width:100%; text-align:left; background:transparent; border:none; color:var(--text); padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:8px;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+            <span>🔄</span><span>Проверить релиз на GitHub</span>
+          </button>
+          <button type="button" id="btn-deploy-all" onclick="closeReleaseMenu(); deployAllOutdated();" style="display:none; width:100%; text-align:left; background:rgba(217,119,6,0.16); border:none; color:#fcd34d; padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600; align-items:center; gap:8px; margin-top:2px;" onmouseover="this.style.background='rgba(217,119,6,0.28)'" onmouseout="this.style.background='rgba(217,119,6,0.16)'">
+            <span>🚀</span><span id="btn-deploy-all-text">Обновить устаревшие (0)</span>
+          </button>
+          <div style="height:1px; background:var(--border); margin:4px 0;"></div>
+          <button type="button" onclick="closeReleaseMenu(); openInfoModal('help');" style="width:100%; text-align:left; background:transparent; border:none; color:var(--text); padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:8px;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+            <span>📖</span><span>Справка (Help)</span>
+          </button>
+          <button type="button" onclick="closeReleaseMenu(); openInfoModal('about');" style="width:100%; text-align:left; background:transparent; border:none; color:var(--text); padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:8px;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+            <span>ℹ️</span><span>О программе (About)</span>
+          </button>
+        </div>
+      </div>
       <button class="btn btn-secondary" onclick="openConfigModal()">⚙ Настройки & Узлы</button>
     </div>
   </div>
 
+  <div id="github-update-banner" style="display:none; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px; padding:12px 16px; border-radius:8px; background:linear-gradient(90deg, rgba(37,99,235,0.18), rgba(16,185,129,0.14)); border:1px solid rgba(59,130,246,0.45);">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span style="font-size:18px;">✨</span>
+      <div>
+        <div id="gh-banner-title" style="font-weight:700; color:#e2e8f0; font-size:14px;">Доступен новый релиз CoreGuard</div>
+        <div id="gh-banner-sub" style="font-size:12px; color:#94a3b8;">Загрузите новую сборку с GitHub в локальный репозиторий Хаба для развёртки на агентов.</div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <a id="gh-banner-link" href="#" target="_blank" style="color:#93c5fd; font-size:12px; text-decoration:none; padding:6px 10px;">Описание на GitHub ↗</a>
+      <button type="button" class="btn" id="btn-sync-github" onclick="syncGithubRelease()" style="background:#2563eb; color:#fff; font-weight:600;">⬇️ Загрузить в Хаб</button>
+      <button type="button" onclick="document.getElementById('github-update-banner').style.display='none'" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:16px; padding:4px 6px;" title="Скрыть">✕</button>
+    </div>
+  </div>
   <div class="stats-bar">
     <div class="stat-card">
       <div style="font-size:12px; color:var(--text-muted);">ВСЕГО УЗЛОВ</div>
@@ -318,21 +351,135 @@
 
     let latestRelease = { available: false, version: '', built_at: '' };
 
+    function toggleReleaseMenu(e) {
+      if (e) e.stopPropagation();
+      const dd = document.getElementById('release-dropdown');
+      if (!dd) return;
+      dd.style.display = (dd.style.display === 'block') ? 'none' : 'block';
+    }
+    function closeReleaseMenu() {
+      const dd = document.getElementById('release-dropdown');
+      if (dd) dd.style.display = 'none';
+    }
+    document.addEventListener('click', function(e) {
+      const wrap = document.getElementById('release-menu-wrap');
+      if (wrap && !wrap.contains(e.target)) closeReleaseMenu();
+    });
+
+    function openInfoModal(mode) {
+      const modal = document.getElementById('info-modal');
+      const title = document.getElementById('info-modal-title');
+      const body = document.getElementById('info-modal-body');
+      if (!modal || !title || !body) return;
+
+      const relVer = (latestRelease && latestRelease.available && latestRelease.version)
+        ? ('v' + latestRelease.version)
+        : 'не загружен в releases/';
+
+      if (mode === 'help') {
+        title.innerText = '📖 Краткая справка — CoreGuard Central Hub';
+        body.innerHTML = `
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <div><strong>1. Архитектура и порты:</strong><br>Хаб работает на порту <code>9090</code> и опрашивает агентов на клиентских ПК по порту <code>48123</code> (HTTP + Basic Auth).</div>
+            <div><strong>2. Обновление агентов по сети (OTA):</strong><br>Актуальный бинарник <code>CoreGuard.exe</code> хранится в папке <code>releases/</code> рядом со службой Хаба. Если версия агента на ПК отличается от пакета в <code>releases/</code>, на его карточке появляется кнопка <strong>«⬆️ Обновить»</strong>, а в меню «Релиз» — массовая раскатка.</div>
+            <div><strong>3. Новые версии с GitHub:</strong><br>Пункт <strong>«🔄 Проверить релиз на GitHub»</strong> проверяет последний выпуск. При появлении новой версии нажмите <strong>«⬇️ Загрузить в Хаб»</strong> — бинарник скачается в <code>releases/</code> без ручного копирования.</div>
+            <div><strong>4. Режим «Сервер 24/7»:</strong><br>В настройках узла галочка <em>«Сервер 24/7»</em> включает тревогу при потере связи. Для обычных офисных ПК её лучше оставлять выключенной.</div>
+          </div>`;
+      } else {
+        title.innerText = 'ℹ️ О программе — CoreGuard Enterprise';
+        body.innerHTML = `
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div><strong>CoreGuard Enterprise NOC &amp; Storage Monitor</strong></div>
+            <div>Пакет агента в репозитории Хаба: <strong>${relVer}</strong></div>
+            <div>Назначение: централизованный мониторинг S.M.A.R.T. накопителей, температурных датчиков, свободного места на дисках и удалённое управление парком ПК/серверов Windows.</div>
+            <div>Технологии: Go (Native Windows IOCTL / WMI), без сторонних зависимостей и внешних утилит.</div>
+            <div>Лицензия: <strong>GNU GPLv3</strong> • © 2026 gresseir-dev</div>
+            <div style="margin-top:4px;"><a href="https://github.com/gresseir-dev/CoreGuard" target="_blank" style="color:#60a5fa; text-decoration:none;">Открыть репозиторий на GitHub ↗</a></div>
+          </div>`;
+      }
+      modal.style.display = 'flex';
+    }
+
+    function closeInfoModal() {
+      const modal = document.getElementById('info-modal');
+      if (modal) modal.style.display = 'none';
+    }
+    async function checkGithubRelease(manual) {
+      const btn = document.getElementById('btn-check-github');
+      const oldText = btn ? btn.innerText : '';
+      if (btn && manual) { btn.disabled = true; btn.innerText = '⏳ Проверка...'; }
+      try {
+        const res = await fetch('/api/github/check?_t=' + Date.now());
+        const data = await res.json();
+        if (!res.ok) {
+          if (manual) alert(data.error || 'Не удалось проверить релизы на GitHub');
+          return;
+        }
+        const banner = document.getElementById('github-update-banner');
+        if (data.has_update) {
+          document.getElementById('gh-banner-title').innerText =
+            `Доступен новый релиз: v${data.remote_version}` + (data.local_version ? ` (сейчас в Хабе: v${data.local_version})` : '');
+          document.getElementById('gh-banner-sub').innerText = data.exe_available
+            ? 'Нажмите «Загрузить в Хаб», чтобы скачать CoreGuard.exe в папку releases/ и обновить агентов.'
+            : 'Внимание: в этом релизе на GitHub не прикреплён отдельный CoreGuard.exe.';
+          const linkEl = document.getElementById('gh-banner-link');
+          if (linkEl && data.html_url) linkEl.href = data.html_url;
+          const syncBtn = document.getElementById('btn-sync-github');
+          if (syncBtn) syncBtn.style.display = data.exe_available ? 'inline-flex' : 'none';
+          if (banner) banner.style.display = 'flex';
+        } else {
+          if (banner) banner.style.display = 'none';
+          if (manual) {
+            alert(`Установлен актуальный релиз v${data.remote_version || data.local_version}. Новых версий на GitHub нет.`);
+          }
+        }
+      } catch (e) {
+        if (manual) alert('Ошибка сети при проверке GitHub: ' + e);
+      } finally {
+        if (btn && manual) { btn.disabled = false; btn.innerText = oldText || '🔄 Проверить релиз'; }
+      }
+    }
+
+    async function syncGithubRelease() {
+      const btn = document.getElementById('btn-sync-github');
+      if (btn) { btn.disabled = true; btn.innerText = '⏳ Скачивание...'; }
+      try {
+        const res = await fetch('/api/github/sync', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || 'Ошибка загрузки релиза с GitHub');
+          return;
+        }
+        document.getElementById('github-update-banner').style.display = 'none';
+        await loadHub();
+        alert(`✅ Релиз v${data.version} успешно загружен в releases/ Хаба!\nТеперь вы можете раскатать его на агентов.`);
+      } catch (e) {
+        alert('Ошибка сети: ' + e);
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerText = '⬇️ Загрузить в Хаб'; }
+      }
+    }
     async function fetchReleaseInfo() {
       try {
         const res = await fetch('/api/release?_t=' + Date.now());
         if (!res.ok) return;
         latestRelease = await res.json();
         const badge = document.getElementById('hub-release-badge');
+        const infoBox = document.getElementById('rel-menu-info');
         if (badge) {
           if (latestRelease.available && latestRelease.version) {
-            badge.innerText = '📦 Релиз: v' + latestRelease.version;
-            badge.title = 'Файл releases/CoreGuard.exe (собран: ' + (latestRelease.built_at || '—') + ')';
+            badge.innerText = '📦 Релиз: v' + latestRelease.version + ' ▾';
             badge.style.color = '#93c5fd';
+            if (infoBox) {
+              const shortSha = latestRelease.sha256 ? (latestRelease.sha256.slice(0, 12) + '…') : '—';
+              infoBox.innerHTML = `<strong>Пакет в Хабе: v${latestRelease.version}</strong><br>Собран: ${latestRelease.built_at || '—'}<br>SHA-256: <code>${shortSha}</code>`;
+            }
           } else {
-            badge.innerText = '📦 releases/ пуст';
-            badge.title = 'Положите CoreGuard.exe в папку releases/ рядом с coreguard_hub.exe';
+            badge.innerText = '📦 Релиз: нет ▾';
             badge.style.color = '#94a3b8';
+            if (infoBox) {
+              infoBox.innerHTML = 'Папка <code>releases/</code> пуста.<br>Соберите проект или загрузите релиз с GitHub.';
+            }
           }
         }
       } catch (e) { console.error(e); }
@@ -353,12 +500,13 @@
       if (!st.online || !latestRelease.available || !latestRelease.version) return '';
       if (st.agent_version === latestRelease.version) return '';
       const label = compact ? `⬆️ v${latestRelease.version}` : `⬆️ Обновить до v${latestRelease.version}`;
-      return `<button type="button" onclick="deploySingleNode('${st.config.id}', '${st.config.name.replace(/'/g, "\\'")}')" style="background:rgba(217,119,6,0.22); border:1px solid rgba(245,158,11,0.5); color:#fcd34d; border-radius:5px; padding:2px 8px; font-size:11px; font-weight:600; cursor:pointer; margin-right:8px;">${label}</button>`;
+      const safeName = String(st.config.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return `<button type="button" onclick="deploySingleNode('${st.config.id}', '${safeName}')" style="background:rgba(217,119,6,0.22); border:1px solid rgba(245,158,11,0.5); color:#fcd34d; border-radius:5px; padding:2px 8px; font-size:11px; font-weight:600; cursor:pointer; margin-right:8px;">${label}</button>`;
     }
 
     async function deploySingleNode(nodeId, nodeName) {
       if (!latestRelease.available) return alert('В папке releases/ Хаба отсутствует файл CoreGuard.exe');
-      if (!confirm(`Обновить агент на «${nodeName}» до версии v${latestRelease.version}?\nАгент скачает бинарник с Хаба и перезапустится за 1–2 секунды.`)) return;
+      if (!confirm('Обновить агент на «' + nodeName + '» до версии v' + latestRelease.version + '?\nАгент скачает бинарник с Хаба и перезапустится за 1–2 секунды.')) return;
       try {
         const res = await fetch('/api/deploy', {
           method: 'POST',
@@ -368,14 +516,14 @@
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Ошибка запуска обновления');
         const item = (data.results || [])[0];
-        alert(item ? `${item.node_name}: ${item.message}` : 'Команда обновления отправлена');
+        alert(item ? (item.node_name + ': ' + item.message) : 'Команда обновления отправлена');
         setTimeout(loadHub, 4500);
       } catch (e) { alert('Ошибка сети: ' + e); }
     }
 
     async function deployAllOutdated() {
       if (!latestRelease.available) return alert('В папке releases/ Хаба отсутствует файл CoreGuard.exe');
-      if (!confirm(`Запустить массовое обновление всех устаревших онлайн-агентов до v${latestRelease.version}?`)) return;
+      if (!confirm('Запустить массовое обновление всех устаревших онлайн-агентов до v' + latestRelease.version + '?')) return;
       const btn = document.getElementById('btn-deploy-all');
       if (btn) { btn.disabled = true; btn.innerText = '⏳ Раскатка...'; }
       try {
@@ -388,7 +536,7 @@
         if (!res.ok) {
           alert(data.error || 'Ошибка массового обновления');
         } else {
-          const lines = (data.results || []).map(r => `${r.success ? '✅' : '❌'} ${r.node_name}: ${r.message}`);
+          const lines = (data.results || []).map(r => (r.success ? '✅ ' : '❌ ') + r.node_name + ': ' + r.message);
           alert(lines.length > 0 ? lines.join('\n') : 'Нет доступных узлов для обновления');
         }
         setTimeout(loadHub, 4500);
@@ -401,6 +549,7 @@
 
     async function loadHub() {
       try {
+        await fetchReleaseInfo();
         const res = await fetch('/api/nodes');
         const nodes = await res.json();
         
@@ -824,7 +973,22 @@
 
     refreshBrandingFromConfig();
     loadHub();
+    setTimeout(() => checkGithubRelease(false), 1200);
     setInterval(loadHub, 5000);
   </script>
+  <!-- Модальное окно Справка / О программе -->
+  <div id="info-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.68); z-index:1300; align-items:center; justify-content:center; padding:16px;" onclick="if(event.target===this) closeInfoModal()">
+    <div style="background:#0f172a; border:1px solid var(--border); border-radius:10px; max-width:560px; width:100%; padding:20px; box-shadow:0 20px 45px rgba(0,0,0,0.65);">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:14px;">
+        <h3 id="info-modal-title" style="margin:0; font-size:16px; color:#f8fafc;">Справка</h3>
+        <button type="button" onclick="closeInfoModal()" style="background:transparent; border:none; color:#94a3b8; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <div id="info-modal-body" style="font-size:13px; color:#cbd5e1; line-height:1.55;"></div>
+      <div style="margin-top:16px; text-align:right;">
+        <button type="button" class="btn btn-secondary" onclick="closeInfoModal()">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

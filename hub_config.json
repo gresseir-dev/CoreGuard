@@ -1,6 +1,12 @@
 {
   "language": "ru",
-  "client_organization": "",
+  "client_organization": "Моя Организация",
+  "msp_branding": {
+    "company_name": "",
+    "support_phone": "",
+    "support_telegram": "",
+    "support_email": ""
+  },
   "nodes": [
     {
       "id": "local-pc",
@@ -15,6 +21,9 @@
   "telegram": {
     "enabled": false,
     "bot_token": "",
-    "chat_id": ""
+    "chat_id": "",
+    "notify_on_warn": false,
+    "notify_on_crit": false,
+    "notify_on_offline": false
   }
 }

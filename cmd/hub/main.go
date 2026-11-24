@@ -873,6 +873,177 @@ func main() {
     relDir := getReleasesDir()
     mux.Handle("/releases/", http.StripPrefix("/releases/", http.FileServer(http.Dir(relDir))))
 
+    mux.HandleFunc("/api/github/check", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        latestWebURL := "https://github.com/gresseir-dev/CoreGuard/releases/latest"
+
+        // Используем веб-редирект github.com/.../releases/latest -> .../releases/tag/vX.Y.Z (не тратит лимит api.github.com и не даёт HTTP 403)
+        noRedirectClient := &http.Client{
+            Timeout: 12 * time.Second,
+            CheckRedirect: func(req *http.Request, via []*http.Request) error {
+                return http.ErrUseLastResponse
+            },
+        }
+        req, _ := http.NewRequest(http.MethodGet, latestWebURL, nil)
+        req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CoreGuard-Hub")
+
+        resp, err := noRedirectClient.Do(req)
+        if err != nil {
+            w.WriteHeader(http.StatusBadGateway)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Ошибка соединения с GitHub: " + err.Error()})
+            return
+        }
+        _ = resp.Body.Close()
+
+        loc := resp.Header.Get("Location")
+        tagName := ""
+        if idx := strings.LastIndex(loc, "/tag/"); idx >= 0 {
+            tagName = strings.TrimSpace(loc[idx+5:])
+        }
+
+        if tagName == "" {
+            w.WriteHeader(http.StatusBadGateway)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{
+                "error": fmt.Sprintf("Не удалось определить последний тег релиза на GitHub (HTTP %d)", resp.StatusCode),
+            })
+            return
+        }
+
+        remoteVer := strings.TrimPrefix(tagName, "v")
+        localRel := loadHubReleaseInfo()
+        exeURL := fmt.Sprintf("https://github.com/gresseir-dev/CoreGuard/releases/download/%s/CoreGuard.exe", tagName)
+
+        // Проверяем HEAD-запросом, прикреплён ли CoreGuard.exe к этому релизу
+        headClient := &http.Client{Timeout: 10 * time.Second}
+        headReq, _ := http.NewRequest(http.MethodHead, exeURL, nil)
+        headReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CoreGuard-Hub")
+        exeAvailable := false
+        if hResp, hErr := headClient.Do(headReq); hErr == nil {
+            exeAvailable = (hResp.StatusCode == http.StatusOK)
+            _ = hResp.Body.Close()
+        }
+
+        hasUpdate := remoteVer != "" && (!localRel.Available || localRel.Version != remoteVer)
+        _ = json.NewEncoder(w).Encode(map[string]interface{}{
+            "has_update":     hasUpdate,
+            "remote_version": remoteVer,
+            "local_version":  localRel.Version,
+            "local_ready":    localRel.Available,
+            "release_name":   "CoreGuard Enterprise " + tagName,
+            "html_url":       fmt.Sprintf("https://github.com/gresseir-dev/CoreGuard/releases/tag/%s", tagName),
+            "exe_available":  exeAvailable,
+            "exe_url":        exeURL,
+        })
+    })
+
+    mux.HandleFunc("/api/github/sync", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        if r.Method != http.MethodPost {
+            http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+            return
+        }
+
+        // Узнаём точный тег последнего релиза через веб-редирект
+        noRedirectClient := &http.Client{
+            Timeout: 12 * time.Second,
+            CheckRedirect: func(req *http.Request, via []*http.Request) error {
+                return http.ErrUseLastResponse
+            },
+        }
+        tagReq, _ := http.NewRequest(http.MethodGet, "https://github.com/gresseir-dev/CoreGuard/releases/latest", nil)
+        tagReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CoreGuard-Hub")
+        tagResp, err := noRedirectClient.Do(tagReq)
+        if err != nil {
+            w.WriteHeader(http.StatusBadGateway)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Ошибка связи с GitHub: " + err.Error()})
+            return
+        }
+        _ = tagResp.Body.Close()
+
+        loc := tagResp.Header.Get("Location")
+        tagName := ""
+        if idx := strings.LastIndex(loc, "/tag/"); idx >= 0 {
+            tagName = strings.TrimSpace(loc[idx+5:])
+        }
+        if tagName == "" {
+            w.WriteHeader(http.StatusBadGateway)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Не найден актуальный релиз на GitHub"})
+            return
+        }
+
+        remoteVer := strings.TrimPrefix(tagName, "v")
+        exeURL := fmt.Sprintf("https://github.com/gresseir-dev/CoreGuard/releases/download/%s/CoreGuard.exe", tagName)
+
+        client := &http.Client{Timeout: 90 * time.Second}
+        dlReq, _ := http.NewRequest(http.MethodGet, exeURL, nil)
+        dlReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CoreGuard-Hub")
+        dlResp, err := client.Do(dlReq)
+        if err != nil {
+            w.WriteHeader(http.StatusBadGateway)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Ошибка скачивания: " + err.Error()})
+            return
+        }
+        defer dlResp.Body.Close()
+
+        if dlResp.StatusCode == http.StatusNotFound {
+            w.WriteHeader(http.StatusUnprocessableEntity)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{
+                "error": fmt.Sprintf("В релизе %s на GitHub не прикреплён отдельный файл CoreGuard.exe", tagName),
+            })
+            return
+        }
+        if dlResp.StatusCode != http.StatusOK {
+            w.WriteHeader(http.StatusBadGateway)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{
+                "error": fmt.Sprintf("GitHub вернул HTTP %d при скачивании CoreGuard.exe", dlResp.StatusCode),
+            })
+            return
+        }
+
+        relDir := getReleasesDir()
+        tmpExe := filepath.Join(relDir, "CoreGuard.exe.tmp")
+        finalExe := filepath.Join(relDir, "CoreGuard.exe")
+
+        out, err := os.Create(tmpExe)
+        if err != nil {
+            w.WriteHeader(http.StatusInternalServerError)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Ошибка записи файла: " + err.Error()})
+            return
+        }
+
+        hasher := sha256.New()
+        written, err := io.Copy(io.MultiWriter(out, hasher), dlResp.Body)
+        _ = out.Close()
+        if err != nil || written < 1024*512 {
+            _ = os.Remove(tmpExe)
+            w.WriteHeader(http.StatusBadGateway)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Файл CoreGuard.exe скачался не полностью"})
+            return
+        }
+
+        _ = os.Remove(finalExe)
+        if err := os.Rename(tmpExe, finalExe); err != nil {
+            _ = os.Remove(tmpExe)
+            w.WriteHeader(http.StatusInternalServerError)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Не удалось сохранить CoreGuard.exe: " + err.Error()})
+            return
+        }
+
+        sha := hex.EncodeToString(hasher.Sum(nil))
+        manifestBytes, _ := json.Marshal(map[string]string{
+            "version":  remoteVer,
+            "sha256":   sha,
+            "built_at": time.Now().Format("2006-01-02 15:04:05") + " (GitHub)",
+        })
+        _ = os.WriteFile(filepath.Join(relDir, "manifest.json"), manifestBytes, 0644)
+
+        _ = json.NewEncoder(w).Encode(map[string]interface{}{
+            "status":  "ok",
+            "version": remoteVer,
+            "sha256":  sha,
+        })
+    })
+
     mux.HandleFunc("/api/release", func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Content-Type", "application/json")
         _ = json.NewEncoder(w).Encode(loadHubReleaseInfo())
