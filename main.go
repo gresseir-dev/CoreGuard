@@ -96,7 +96,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.3.28"
+const AgentVersion = "2.3.29"
 
 const LicensePublicKeyHex = "001594263b9744110c1cbb9a968ea685e14ed9b4e44cdd860e79f4d81d8b3461"
 

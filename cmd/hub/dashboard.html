@@ -416,6 +416,8 @@
       const modal = document.getElementById('info-modal');
       if (modal) modal.style.display = 'none';
     }
+    let latestGithubCheck = null;
+
     async function checkGithubRelease(manual) {
       const btn = document.getElementById('btn-check-github');
       const oldText = btn ? btn.innerText : '';
@@ -427,48 +429,89 @@
           if (manual) alert(data.error || 'Не удалось проверить релизы на GitHub');
           return;
         }
+        latestGithubCheck = data;
+
         const banner = document.getElementById('github-update-banner');
-        if (data.has_update) {
+        const syncBtn = document.getElementById('btn-sync-github');
+        const menuUpdBtn = document.getElementById('menu-update-release');
+        const menuUpdTxt = document.getElementById('menu-update-release-text');
+
+        const canUpdateAny = data.has_update && (data.exe_available || data.hub_exe_available);
+
+        if (canUpdateAny) {
           document.getElementById('gh-banner-title').innerText =
-            `Доступен новый релиз: v${data.remote_version}` + (data.local_version ? ` (сейчас в Хабе: v${data.local_version})` : '');
-          document.getElementById('gh-banner-sub').innerText = data.exe_available
-            ? 'Нажмите «Загрузить в Хаб», чтобы скачать CoreGuard.exe в папку releases/ и обновить агентов.'
-            : 'Внимание: в этом релизе на GitHub не прикреплён отдельный CoreGuard.exe.';
+            `Доступен новый релиз: v${data.remote_version}` +
+            (data.hub_version ? ` (текущий: v${data.hub_version})` : '');
+          document.getElementById('gh-banner-sub').innerText =
+            'Нажмите «Обновить до v' + data.remote_version + '», чтобы автоматически обновить Хаб и пакет агента в releases/.';
           const linkEl = document.getElementById('gh-banner-link');
           if (linkEl && data.html_url) linkEl.href = data.html_url;
-          const syncBtn = document.getElementById('btn-sync-github');
-          if (syncBtn) syncBtn.style.display = data.exe_available ? 'inline-flex' : 'none';
+
+          if (syncBtn) {
+            syncBtn.style.display = 'inline-flex';
+            syncBtn.innerText = `⬇️ Обновить до v${data.remote_version}`;
+          }
+          if (menuUpdBtn) menuUpdBtn.style.display = 'flex';
+          if (menuUpdTxt) menuUpdTxt.innerText = `Обновить до v${data.remote_version}`;
           if (banner) banner.style.display = 'flex';
         } else {
           if (banner) banner.style.display = 'none';
+          if (menuUpdBtn) menuUpdBtn.style.display = 'none';
           if (manual) {
-            alert(`Установлен актуальный релиз v${data.remote_version || data.local_version}. Новых версий на GitHub нет.`);
+            alert(`Установлен актуальный релиз v${data.remote_version || data.hub_version}. Обновлений нет.`);
           }
         }
       } catch (e) {
         if (manual) alert('Ошибка сети при проверке GitHub: ' + e);
       } finally {
-        if (btn && manual) { btn.disabled = false; btn.innerText = oldText || '🔄 Проверить релиз'; }
+        if (btn && manual) { btn.disabled = false; btn.innerText = oldText || '🔄 Проверить релиз на GitHub'; }
       }
     }
 
-    async function syncGithubRelease() {
-      const btn = document.getElementById('btn-sync-github');
-      if (btn) { btn.disabled = true; btn.innerText = '⏳ Скачивание...'; }
+    async function installFullRelease() {
+      const targetVer = (latestGithubCheck && latestGithubCheck.remote_version) ? latestGithubCheck.remote_version : 'актуальной версии';
+      if (!confirm(`Обновить CoreGuard Central Hub и пакет агента до v${targetVer}?\nСлужба Хаба перезапустится автоматически через 4–5 секунд.`)) return;
+
+      const bannerBtn = document.getElementById('btn-sync-github');
+      const bannerTitle = document.getElementById('gh-banner-title');
+      if (bannerBtn) { bannerBtn.disabled = true; bannerBtn.innerText = '⏳ Загрузка пакета...'; }
+
       try {
-        const res = await fetch('/api/github/sync', { method: 'POST' });
-        const data = await res.json();
-        if (!res.ok) {
-          alert(data.error || 'Ошибка загрузки релиза с GitHub');
+        // Шаг 1: обновляем CoreGuard.exe в releases/ (если есть в релизе и требует обновления)
+        if (!latestGithubCheck || (latestGithubCheck.agent_update && latestGithubCheck.exe_available)) {
+          const syncRes = await fetch('/api/github/sync', { method: 'POST' });
+          const syncData = await syncRes.json();
+          if (!syncRes.ok) {
+            alert(syncData.error || 'Ошибка загрузки пакета агента с GitHub');
+            if (bannerBtn) { bannerBtn.disabled = false; bannerBtn.innerText = `⬇️ Обновить до v${targetVer}`; }
+            return;
+          }
+        }
+
+        // Шаг 2: обновляем сам coreguard_hub.exe и перезапускаем службу CoreGuardHub
+        if (!latestGithubCheck || (latestGithubCheck.hub_update && latestGithubCheck.hub_exe_available)) {
+          if (bannerBtn) bannerBtn.innerText = '⏳ Перезапуск Хаба...';
+          const hubRes = await fetch('/api/github/self-update', { method: 'POST' });
+          const hubData = await hubRes.json();
+          if (!hubRes.ok) {
+            alert(hubData.error || 'Ошибка обновления бинарника Хаба');
+            if (bannerBtn) { bannerBtn.disabled = false; bannerBtn.innerText = `⬇️ Обновить до v${targetVer}`; }
+            return;
+          }
+          if (bannerTitle) bannerTitle.innerText = `⏳ ${hubData.message || 'Перезапуск службы CoreGuardHub...'}`;
+          setTimeout(() => { window.location.reload(); }, 5000);
           return;
         }
+
+        // Если обновлялся только пакет агента в releases/
         document.getElementById('github-update-banner').style.display = 'none';
+        const menuUpdBtn = document.getElementById('menu-update-release');
+        if (menuUpdBtn) menuUpdBtn.style.display = 'none';
         await loadHub();
-        alert(`✅ Релиз v${data.version} успешно загружен в releases/ Хаба!\nТеперь вы можете раскатать его на агентов.`);
+        alert(`✅ Релиз v${targetVer} успешно загружен! Теперь можно раскатать его на агентов.`);
       } catch (e) {
-        alert('Ошибка сети: ' + e);
-      } finally {
-        if (btn) { btn.disabled = false; btn.innerText = '⬇️ Загрузить в Хаб'; }
+        alert('Ошибка сети при обновлении: ' + e);
+        if (bannerBtn) { bannerBtn.disabled = false; bannerBtn.innerText = `⬇️ Обновить до v${targetVer}`; }
       }
     }
     async function fetchReleaseInfo() {
