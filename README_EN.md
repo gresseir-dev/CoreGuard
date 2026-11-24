@@ -1,39 +1,41 @@
 # CoreGuard Enterprise
 
-**Lightweight, Open-Source Hardware & Storage Health Monitoring Suite for Windows (GPLv3)**
+**CoreGuard Enterprise** is a centralized monitoring and fleet management solution for **Windows** workstations and servers, tracking drive health (**S.M.A.R.T.**), **CPU** and **motherboard/drive temperatures**, free system drive space, and incident history.
 
-**CoreGuard Enterprise** is a zero-dependency monitoring suite written in Go for system administrators, field engineers, and Managed Service Providers (MSPs). It queries NVMe and SATA SMART diagnostics directly via native Windows kernel IOCTL calls, tracks CPU/motherboard thermals, triggers emergency backup scripts, and aggregates fleet status into a central web dashboard (**CoreGuard Central Hub**).
+Current release: **v2.3.31** • License: **GNU GPLv3** • Repository: [github.com/gresseir-dev/CoreGuard](https://github.com/gresseir-dev/CoreGuard)
 
 ---
 
 ## Key Features
 
-### Monitoring Agent (CoreGuard.exe)
-* **Native Windows IOCTL SMART:** Direct communication with NVMe and SATA storage drivers without external CLI dependencies (smartctl.exe is not required), providing full SMART attribute tables, wear-level metrics, power-on hours, and total bytes written.
-* **Per-Drive Controls:** Individual temperature thresholds per physical drive and a one-click **Ignore Drive** toggle to exclude specific drives from alerts and central hub summaries.
-* **System Thermals & Volume Tracking:** Live monitoring of CPU/motherboard temperatures and critical free space thresholds on drive C: with interactive SVG trend charts.
-* **MSP Branding & Automated Response:** Displays IT support provider contacts (phone, Telegram, email), blocking critical alert popups, and automated .bat/.ps1 emergency backup script execution on impending drive failure.
-* **Silent System Tray Agent:** Runs silently in the background (-H=windowsgui) with a bilingual (EN/RU) local web dashboard at http://127.0.0.1:48123/ and optional Basic Auth + IP Whitelist for LAN access.
-
-### Central Server (coreguard_hub.exe)
-* **Centralized NOC Dashboard (:9090):** Runs as a native Windows Service (CoreGuardHub), aggregating fleet health, storage status, and incident logs.
-* **Remote Branding Sync:** Pushes client organization names and IT support contact cards directly to monitored endpoints.
-* **Telegram Alerting:** Instant notifications on critical SSD/HDD wear, overheating, or offline nodes.
-
-### Enterprise Installer (Inno Setup 6)
-* Deployment profiles for **Client Workstation (Agent only)** or **Admin Server (Agent + Central Hub)**.
-* **Uninstall Configuration Retention:** Interactive uninstall prompt preserves config.json, hub_config.json, and nodes.json by default for seamless upgrades and testing.
+* **Central Hub & Agent Architecture:**
+  * **CoreGuard Central Hub** (web dashboard on port 9090) polls distributed agents over HTTP with **Basic Auth** (default port 48123), tracking node states (HEALTHY, WARNING, CRITICAL) and alert events.
+  * **Automatic Localhost Provisioning (local-pc):** when starting with an empty node list, the Hub provisions 127.0.0.1:48123 and syncs credentials/port from an adjacent config.json when available, while protecting the local node during configuration saves.
+* **Unified OTA Release & Agent Updates via GitHub Releases:**
+  * From the **📦 Релиз (Release)** menu or update banner, administrators can check GitHub Releases and use a **single release update action** to pull the latest CoreGuard.exe into eleases/ (verified by **SHA-256**) and update coreguard_hub.exe with automatic CoreGuardHub service restart when a newer Hub binary is available.
+  * One-click single-node or fleet-wide agent rollout over the network with safe old-PID wait and clean restart.
+* **Refined Dashboard & Alerting:**
+  * Clean two-row node card headers (node name and status badge on top; group, endpoint, version pill, and unread incident indicator below), grid/list views, incident log, and **Telegram** notifications.
+  * Built-in **Quick Help** and **About** dialogs in the release menu, plus MSP / client organization branding.
+* **Streamlined Windows Installer:**
+  * Supports installing the **Agent**, **Central Hub** (CoreGuardHub), or both, with the desktop shortcut task unchecked by default for cleaner server and workstation deployments.
 
 ---
 
-## Build from Source
+## Quick Start
 
-`powershell
-go build -ldflags="-s -w -H windowsgui" -o CoreGuard.exe .
-go build -ldflags="-s -w -H windowsgui" -o coreguard_hub.exe ./cmd/hub
+1. Download CoreGuard_Setup_v2.3.31_x64.exe from [GitHub Releases](https://github.com/gresseir-dev/CoreGuard/releases) and run as Administrator.
+2. Select the desired components (**Agent**, **Central Hub**, or both).
+3. Open the Central Hub dashboard at http://localhost:9090.
+4. Open **⚙ Настройки & Узлы** to register remote agents (<host>:48123), configure Telegram alerts, and set organization branding.
+
+---
+
+## Building from Source
+
+\\\powershell
+Set-Location "C:\CoreGuard"
 .\build.ps1
-`",
-  ",
-  
+\\\
 
-Licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE).
+This builds the agent (CoreGuard.exe), Central Hub (coreguard_hub.exe), populates eleases/, and packages the installer.
