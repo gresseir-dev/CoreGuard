@@ -87,7 +87,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.4.8"
+const AgentVersion = "2.4.9"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -1406,7 +1406,11 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
         case ID_TRAY_CHARTS:
             openDashboard()
         case ID_TRAY_CHECK:
-            go runCheckCycle()
+            if isTrayOnlyMode {
+                go syncTrayFromService()
+            } else {
+                go runCheckCycle()
+            }
         case ID_TRAY_EXIT:
             procShellNotifyIconW.Call(NIM_DELETE, uintptr(unsafe.Pointer(&nid)))
             procPostQuitMessage.Call(0)
@@ -1438,6 +1442,48 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
     return ret
 }
 
+var isTrayOnlyMode bool
+
+func syncTrayFromService() {
+    url := fmt.Sprintf("http://127.0.0.1:%d/api/data", LocalDashboardPort)
+    client := &http.Client{Timeout: 3 * time.Second}
+    resp, err := client.Get(url)
+    if err != nil {
+        stateMu.Lock()
+        globalReport.System.HealthState = "SERVICE OFFLINE"
+        stateMu.Unlock()
+        if globalHWnd != 0 {
+            copyToUTF16Fixed(nid.SzTip[:], "CoreGuard Enterprise: Service offline")
+            nid.UFlags = NIF_TIP
+            procShellNotifyIconW.Call(NIM_MODIFY, uintptr(unsafe.Pointer(&nid)))
+        }
+        return
+    }
+    defer resp.Body.Close()
+
+    var raw map[string]json.RawMessage
+    if err := json.NewDecoder(resp.Body).Decode(&raw); err == nil {
+        var ver string
+        _ = json.Unmarshal(raw["version"], &ver)
+
+        stateMu.Lock()
+        if rBytes, ok := raw["report"]; ok {
+            _ = json.Unmarshal(rBytes, &globalReport)
+        }
+        if cBytes, ok := raw["config"]; ok {
+            _ = json.Unmarshal(cBytes, &globalConfig)
+        }
+        tip := fmt.Sprintf("CoreGuard v%s | C: %.1f GB (%s)", ver, globalReport.System.FreeGB, globalReport.System.HealthState)
+        stateMu.Unlock()
+
+        if globalHWnd != 0 {
+            copyToUTF16Fixed(nid.SzTip[:], tip)
+            nid.UFlags = NIF_TIP
+            procShellNotifyIconW.Call(NIM_MODIFY, uintptr(unsafe.Pointer(&nid)))
+        }
+    }
+}
+
 type agentWindowsService struct{}
 
 func (s *agentWindowsService) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (bool, uint32) {
@@ -1449,23 +1495,34 @@ func (s *agentWindowsService) Execute(args []string, r <-chan svc.ChangeRequest,
     startLocalWebServer()
     syncRemoteServer()
 
-    go runCheckCycle()
-
-    go func() {
-        currentDur := time.Duration(globalConfig.PollIntervalMin) * time.Minute
-        ticker := time.NewTicker(currentDur)
-        defer ticker.Stop()
-
-        for {
-            select {
-            case newDur := <-tickerResetCh:
-                ticker.Stop()
-                ticker = time.NewTicker(newDur)
-            case <-ticker.C:
-                runCheckCycle()
+    if isTrayOnlyMode {
+        go syncTrayFromService()
+        go func() {
+            ticker := time.NewTicker(5 * time.Second)
+            defer ticker.Stop()
+            for range ticker.C {
+                syncTrayFromService()
             }
-        }
-    }()
+        }()
+    } else {
+        go runCheckCycle()
+
+        go func() {
+            currentDur := time.Duration(globalConfig.PollIntervalMin) * time.Minute
+            ticker := time.NewTicker(currentDur)
+            defer ticker.Stop()
+
+            for {
+                select {
+                case newDur := <-tickerResetCh:
+                    ticker.Stop()
+                    ticker = time.NewTicker(newDur)
+                case <-ticker.C:
+                    runCheckCycle()
+                }
+            }
+        }()
+    }
 
     changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 
@@ -1497,14 +1554,17 @@ func main() {
     }
 
     testFlag := flag.Bool("test", false, "Enable test notifications menu")
+    trayFlag := flag.Bool("tray", false, "Run lightweight tray UI connected to CoreGuardAgent service")
     flag.Parse()
     isTestMode = *testFlag
+    isTrayOnlyMode = *trayFlag
 
     loadConfig()
-    loadHistory()
-
-    startLocalWebServer()
-    syncRemoteServer()
+    if !isTrayOnlyMode {
+        loadHistory()
+        startLocalWebServer()
+        syncRemoteServer()
+    }
 
     className := utf16FromString("CoreGuardTrayClass")
     type WNDCLASSEXW struct {
@@ -1552,23 +1612,34 @@ func main() {
     copyToUTF16Fixed(nid.SzTip[:], "CoreGuard Enterprise: Starting engine...")
     procShellNotifyIconW.Call(NIM_ADD, uintptr(unsafe.Pointer(&nid)))
 
-    go runCheckCycle()
-
-    go func() {
-        currentDur := time.Duration(globalConfig.PollIntervalMin) * time.Minute
-        ticker := time.NewTicker(currentDur)
-        defer ticker.Stop()
-
-        for {
-            select {
-            case newDur := <-tickerResetCh:
-                ticker.Stop()
-                ticker = time.NewTicker(newDur)
-            case <-ticker.C:
-                runCheckCycle()
+    if isTrayOnlyMode {
+        go syncTrayFromService()
+        go func() {
+            ticker := time.NewTicker(5 * time.Second)
+            defer ticker.Stop()
+            for range ticker.C {
+                syncTrayFromService()
             }
-        }
-    }()
+        }()
+    } else {
+        go runCheckCycle()
+
+        go func() {
+            currentDur := time.Duration(globalConfig.PollIntervalMin) * time.Minute
+            ticker := time.NewTicker(currentDur)
+            defer ticker.Stop()
+
+            for {
+                select {
+                case newDur := <-tickerResetCh:
+                    ticker.Stop()
+                    ticker = time.NewTicker(newDur)
+                case <-ticker.C:
+                    runCheckCycle()
+                }
+            }
+        }()
+    }
 
     type MSG struct {
         HWnd    windows.Handle

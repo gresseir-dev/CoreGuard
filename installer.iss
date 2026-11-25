@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "CoreGuard Enterprise"
-#define MyAppVersion "2.4.8"
+#define MyAppVersion "2.4.9"
 #define MyAppPublisher "CoreGuard"
 #define MyAppExeName "CoreGuard.exe"; Components: agent
 #define MyHubExeName "coreguard_hub.exe"; Components: hub
@@ -67,6 +67,10 @@ Name: "{autodesktop}\CoreGuard Agent"; Filename: "{app}\{#MyAppExeName}"; Tasks:
 Name: "{group}\Веб-панель CoreGuard Hub"; Filename: "http://localhost:9090"; Components: hub
 Name: "{autodesktop}\Веб-панель CoreGuard Hub"; Filename: "http://localhost:9090"; Tasks: desktopicon; Components: hub
 
+
+[Registry]
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "CoreGuardTray"; ValueData: """{app}\CoreGuard.exe"" --tray"; Flags: uninsdeletevalue; Components: agent
+
 [Run]
 Filename: "{sys}\\sc.exe"; Parameters: "create CoreGuardAgent binPath= ""{app}\\CoreGuard.exe"" start= auto DisplayName= ""CoreGuard Monitoring Agent"""; Flags: runhidden; StatusMsg: "Регистрация службы CoreGuardAgent..."; Components: agent
 Filename: "{sys}\\sc.exe"; Parameters: "failure CoreGuardAgent reset= 30 actions= restart/1500/restart/3000/restart/5000"; Flags: runhidden; Components: agent
@@ -83,7 +87,7 @@ Filename: "{sys}\sc.exe"; Parameters: "create {#MyServiceName} binPath= ""{app}\
 Filename: "{sys}\sc.exe"; Parameters: "start {#MyServiceName}"; Flags: runhidden; StatusMsg: "Запуск службы CoreGuardHub..."; Components: hub
 
 ; 4. Запуск агента с правами администратора
-; Агент запускается автоматически как системная служба CoreGuardAgent
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--tray"; Flags: nowait postinstall; Description: "Запустить иконку мониторинга CoreGuard в трее"; Components: agent
 
 ; 5. Автоматическое открытие веб-панели мониторинга в браузере
 Filename: "http://localhost:9090"; Flags: shellexec runmaximized postinstall; Description: "Открыть панель мониторинга Hub (http://localhost:9090)"; Components: hub
