@@ -112,6 +112,7 @@
       <button class="btn btn-alert" id="btn-events-open" onclick="openEventsModal()">
         🔔 Журнал тревог <span class="unread-pill" id="unread-count-pill">0</span>
       </button>
+      <button type="button" class="btn" id="btn-top-deploy-all" onclick="deployAllOutdated();" style="display:none; background:rgba(217,119,6,0.22); border:1px solid rgba(245,158,11,0.55); color:#fcd34d; font-weight:600; align-items:center; gap:6px;" onmouseover="this.style.background='rgba(217,119,6,0.34)'" onmouseout="this.style.background='rgba(217,119,6,0.22)'">🚀 <span id="btn-top-deploy-all-text">Обновить парк (0)</span></button>
       <button class="btn btn-secondary" onclick="openConfigModal()">⚙ Настройки & Узлы</button>
       <div id="release-menu-wrap" style="position:relative; display:inline-block;">
         <button type="button" class="btn btn-secondary" id="hub-release-badge" onclick="toggleReleaseMenu(event)" style="border-color:rgba(59,130,246,0.45); color:#93c5fd; font-weight:600;">📦 Релиз: — ▾</button>
@@ -624,7 +625,11 @@
       if (!latestRelease.available) return alert('В папке releases/ Хаба отсутствует файл CoreGuard.exe');
       if (!confirm('Запустить массовое обновление всех устаревших онлайн-агентов до v' + latestRelease.version + '?')) return;
       const btn = document.getElementById('btn-deploy-all');
+      const topBtn = document.getElementById('btn-top-deploy-all');
+      const topBtnTxt = document.getElementById('btn-top-deploy-all-text');
+      const prevTopLabel = topBtnTxt ? topBtnTxt.innerText : '';
       if (btn) { btn.disabled = true; btn.innerText = '⏳ Раскатка...'; }
+      if (topBtn) { topBtn.disabled = true; if (topBtnTxt) topBtnTxt.innerText = 'Раскатка...'; }
       try {
         const res = await fetch('/api/deploy', {
           method: 'POST',
@@ -643,6 +648,7 @@
         alert('Ошибка сети: ' + e);
       } finally {
         if (btn) btn.disabled = false;
+        if (topBtn) { topBtn.disabled = false; if (topBtnTxt && prevTopLabel) topBtnTxt.innerText = prevTopLabel; }
       }
     }
 
