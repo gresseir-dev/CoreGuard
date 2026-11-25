@@ -1,5 +1,9 @@
 # Changelog — CoreGuard Enterprise
 
+## What's New in CoreGuard Enterprise v2.5.4 (2026-11-25)
+
+### Исправления
+- **Импорт списка ПК ('fleet_inventory.json'):** новые узлы при импорте теперь добавляются в режиме **Рабочая станция** ('alert_on_offline: false') без автоматической установки галочки «Сервер 24/7».
 ## What's New in CoreGuard Enterprise v2.5.3 (2026-11-25)
 
 ### Исправления
