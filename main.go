@@ -1228,7 +1228,6 @@ func buildAppRouter() *http.ServeMux {
 
         go func() {
             time.Sleep(700 * time.Millisecond)
-            pid := os.Getpid()
             exeDir := filepath.Dir(exePath)
             lockPath := filepath.Join(exeDir, "coreguard.lock")
             _ = os.Remove(lockPath)
