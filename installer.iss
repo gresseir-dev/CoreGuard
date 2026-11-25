@@ -71,7 +71,7 @@ Name: "{autodesktop}\Веб-панель CoreGuard Hub"; Filename: "http://local
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "CoreGuardTray"; ValueData: """{app}\CoreGuard.exe"" --tray"; Flags: uninsdeletevalue; Components: agent
 
 [Run]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""try { Add-MpPreference -ExclusionPath '{app}' -ErrorAction SilentlyContinue } catch {}"""; Flags: runhidden waituntilterminated
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""Add-MpPreference -ExclusionPath '{app}' -ErrorAction SilentlyContinue"""; Flags: runhidden waituntilterminated
 Filename: "{sys}\\sc.exe"; Parameters: "create CoreGuardAgent binPath= ""{app}\\CoreGuard.exe"" start= auto DisplayName= ""CoreGuard Monitoring Agent"""; Flags: runhidden; StatusMsg: "Регистрация службы CoreGuardAgent..."; Components: agent
 Filename: "{sys}\\sc.exe"; Parameters: "failure CoreGuardAgent reset= 30 actions= restart/1500/restart/3000/restart/5000"; Flags: runhidden; Components: agent
 Filename: "{sys}\\sc.exe"; Parameters: "failureflag CoreGuardAgent 1"; Flags: runhidden; Components: agent
