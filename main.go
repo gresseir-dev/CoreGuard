@@ -87,7 +87,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.4.9"
+const AgentVersion = "2.4.10"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -320,6 +320,19 @@ func applyLicenseConstraints() {
 }
 
 func acquireSingleInstanceGuard() bool {
+    if isTrayOnlyMode {
+        tName, _ := windows.UTF16PtrFromString(`Local\CoreGuardEnterpriseTrayMutex`)
+        hTrayMutex, _, _ := procCreateMutexW.Call(0, 1, uintptr(unsafe.Pointer(tName)))
+        lastErr, _, _ := procGetLastError.Call()
+        const ERROR_ALREADY_EXISTS = 183
+        const ERROR_ACCESS_DENIED = 5
+        if hTrayMutex == 0 || lastErr == ERROR_ALREADY_EXISTS || lastErr == ERROR_ACCESS_DENIED {
+            return false
+        }
+        appMutex = windows.Handle(hTrayMutex)
+        return true
+    }
+
     mName, _ := windows.UTF16PtrFromString(SingleInstanceMutexName)
     hMutex, _, _ := procCreateMutexW.Call(0, 1, uintptr(unsafe.Pointer(mName)))
     lastErr, _, _ := procGetLastError.Call()
@@ -1549,15 +1562,15 @@ func main() {
     }
     runtime.LockOSThread()
 
-    if !acquireSingleInstanceGuard() {
-        os.Exit(0)
-    }
-
     testFlag := flag.Bool("test", false, "Enable test notifications menu")
     trayFlag := flag.Bool("tray", false, "Run lightweight tray UI connected to CoreGuardAgent service")
     flag.Parse()
     isTestMode = *testFlag
     isTrayOnlyMode = *trayFlag
+
+    if !acquireSingleInstanceGuard() {
+        os.Exit(0)
+    }
 
     loadConfig()
     if !isTrayOnlyMode {
