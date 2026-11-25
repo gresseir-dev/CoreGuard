@@ -86,7 +86,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.3.34"
+const AgentVersion = "2.4.0"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -1235,11 +1235,11 @@ func buildAppRouter() *http.ServeMux {
             _ = os.Remove(exePath + ":Zone.Identifier")
 
             psCmd := fmt.Sprintf(
-                "for($i=0;$i -lt 50;$i++){ if(-not (Get-Process -Id %d -ErrorAction SilentlyContinue)){ break }; Start-Sleep -Milliseconds 250 }; Remove-Item -LiteralPath '%s' -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 300; cmd.exe /c start \"\" /D \"%s\" \"%s\"",
+                "for($i=0;$i -lt 60;$i++){ if(-not (Get-Process -Id %d -ErrorAction SilentlyContinue)){ break }; Start-Sleep -Milliseconds 200 }; Remove-Item -LiteralPath '%s' -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 300; Start-Process -FilePath '%s' -WorkingDirectory '%s'",
                 pid,
                 strings.ReplaceAll(lockPath, "'", "''"),
-                strings.ReplaceAll(exeDir, "\"", "\\\""),
-                strings.ReplaceAll(exePath, "\"", "\\\""),
+                strings.ReplaceAll(exePath, "'", "''"),
+                strings.ReplaceAll(exeDir, "'", "''"),
             )
             cmd := exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", psCmd)
             cmd.Dir = exeDir

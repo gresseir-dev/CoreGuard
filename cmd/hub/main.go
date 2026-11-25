@@ -772,6 +772,172 @@ func main() {
 
     mux := http.NewServeMux()
 
+    mux.HandleFunc("/api/nodes/import", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        if r.Method != http.MethodPost {
+            w.WriteHeader(http.StatusMethodNotAllowed)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "method not allowed"})
+            return
+        }
+
+        bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 4*1024*1024))
+        if err != nil {
+            w.WriteHeader(http.StatusBadRequest)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Ошибка чтения тела запроса: " + err.Error()})
+            return
+        }
+
+        type ImportedHost struct {
+            Hostname  string `json:"hostname"`
+            User      string `json:"user"`
+            IP        string `json:"ip"`
+            AgentPort int    `json:"agent_port"`
+            Group     string `json:"group"`
+        }
+        type ImportedPayload struct {
+            Hosts []ImportedHost `json:"hosts"`
+        }
+
+        var payload ImportedPayload
+        trimmed := bytes.TrimSpace(bodyBytes)
+        if len(trimmed) == 0 {
+            w.WriteHeader(http.StatusBadRequest)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Пустой JSON-файл"})
+            return
+        }
+        if trimmed[0] == '[' {
+            if err := json.Unmarshal(trimmed, &payload.Hosts); err != nil {
+                w.WriteHeader(http.StatusBadRequest)
+                _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Неверный формат массива узлов: " + err.Error()})
+                return
+            }
+        } else {
+            if err := json.Unmarshal(trimmed, &payload); err != nil {
+                w.WriteHeader(http.StatusBadRequest)
+                _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Неверный формат файла инвентаризации: " + err.Error()})
+                return
+            }
+        }
+
+        if len(payload.Hosts) == 0 {
+            w.WriteHeader(http.StatusBadRequest)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "В файле не найдено ни одной записи в списке hosts"})
+            return
+        }
+
+        defaultUser := "admin"
+        defaultPass := ""
+        if exe, err := os.Executable(); err == nil {
+            agentCfgPath := filepath.Join(filepath.Dir(exe), "config.json")
+            if rawCfg, err := os.ReadFile(agentCfgPath); err == nil {
+                var aCfg struct {
+                    AuthUser string `json:"auth_user"`
+                    AuthPass string `json:"auth_pass"`
+                }
+                if json.Unmarshal(rawCfg, &aCfg) == nil {
+                    if strings.TrimSpace(aCfg.AuthUser) != "" {
+                        defaultUser = strings.TrimSpace(aCfg.AuthUser)
+                    }
+                    defaultPass = aCfg.AuthPass
+                }
+            }
+        }
+
+        hub.mu.Lock()
+        addedCount := 0
+        updatedCount := 0
+        skippedCount := 0
+
+        for idx, h := range payload.Hosts {
+            ip := strings.TrimSpace(h.IP)
+            hostname := strings.TrimSpace(h.Hostname)
+            if ip == "" || ip == "127.0.0.1" {
+                skippedCount++
+                continue
+            }
+            port := h.AgentPort
+            if port <= 0 || port > 65535 {
+                port = 48123
+            }
+            hostAddr := fmt.Sprintf("%s:%d", ip, port)
+
+            displayName := hostname
+            if displayName == "" {
+                displayName = ip
+            }
+            userShort := strings.TrimSpace(h.User)
+            if parts := strings.Split(userShort, "\\"); len(parts) == 2 && parts[1] != "" {
+                userShort = parts[1]
+            }
+            if userShort != "" && !strings.Contains(strings.ToLower(displayName), strings.ToLower(userShort)) {
+                displayName = fmt.Sprintf("%s (%s)", displayName, userShort)
+            }
+
+            grp := strings.TrimSpace(h.Group)
+            if grp == "" {
+                grp = "Рабочие станции"
+            }
+
+            foundIdx := -1
+            for i := range hub.nodes {
+                if strings.EqualFold(strings.TrimSpace(hub.nodes[i].Host), hostAddr) ||
+                    (hostname != "" && strings.EqualFold(strings.TrimSpace(hub.nodes[i].Name), hostname)) {
+                    foundIdx = i
+                    break
+                }
+            }
+
+            if foundIdx >= 0 {
+                hub.nodes[foundIdx].Host = hostAddr
+                if displayName != "" {
+                    hub.nodes[foundIdx].Name = displayName
+                }
+                if strings.TrimSpace(h.Group) != "" {
+                    hub.nodes[foundIdx].Group = grp
+                }
+                if st, ok := hub.states[hub.nodes[foundIdx].ID]; ok {
+                    st.Config = hub.nodes[foundIdx]
+                }
+                updatedCount++
+                continue
+            }
+
+            baseID := strings.ToLower(hostname)
+            if baseID == "" {
+                baseID = strings.ReplaceAll(ip, ".", "-")
+            }
+            nodeID := fmt.Sprintf("imp-%s-%d", baseID, time.Now().UnixNano()+int64(idx))
+
+            nc := NodeConfig{
+                ID:             nodeID,
+                Name:           displayName,
+                Group:          grp,
+                Host:           hostAddr,
+                AuthUser:       defaultUser,
+                AuthPass:       defaultPass,
+                AlertOnOffline: true,
+            }
+            hub.nodes = append(hub.nodes, nc)
+            hub.states[nodeID] = &NodeStatus{
+                Config:  nc,
+                Overall: "OFFLINE",
+            }
+            addedCount++
+        }
+
+        _ = hub.saveDiskLocked()
+        hub.mu.Unlock()
+
+        hub.TriggerPoll()
+
+        _ = json.NewEncoder(w).Encode(map[string]interface{}{
+            "status":  "ok",
+            "added":   addedCount,
+            "updated": updatedCount,
+            "skipped": skippedCount,
+            "total":   len(payload.Hosts),
+        })
+    })
     mux.HandleFunc("/api/nodes", func(w http.ResponseWriter, r *http.Request) {
         hub.mu.RLock()
         defer hub.mu.RUnlock()
@@ -888,32 +1054,41 @@ func main() {
             if len(req.Nodes) == 0 {
                 hub.nodes = []NodeConfig{hub.buildDefaultLocalNode()}
             } else {
-                // Если в существующей конфигурации был local-pc, а клиент прислал только новые узлы без него (например, со старой кэш-страницы), сохраняем local-pc
-                hasLocalInReq := false
+                seenIDs := make(map[string]bool)
+                deduped := make([]NodeConfig, 0, len(req.Nodes))
                 for _, n := range req.Nodes {
-                    if n.ID == "local-pc" || strings.HasPrefix(n.Host, "127.0.0.1:") || strings.EqualFold(n.Host, "localhost:48123") {
-                        hasLocalInReq = true
-                        break
+                    id := strings.TrimSpace(n.ID)
+                    if id == "" || seenIDs[id] {
+                        continue
                     }
+                    seenIDs[id] = true
+                    deduped = append(deduped, n)
                 }
-                if !hasLocalInReq {
-                    var existingLocal *NodeConfig
-                    for _, oldN := range hub.nodes {
-                        if oldN.ID == "local-pc" {
-                            cp := oldN
-                            existingLocal = &cp
-                            break
-                        }
-                    }
-                    if existingLocal != nil {
-                        hub.nodes = append([]NodeConfig{*existingLocal}, req.Nodes...)
-                    } else {
-                        hub.nodes = req.Nodes
-                    }
-                } else {
-                    hub.nodes = req.Nodes
+                if len(deduped) == 0 {
+                    deduped = []NodeConfig{hub.buildDefaultLocalNode()}
+                }
+                hub.nodes = deduped
+            }
+
+            // Удаляем из оперативного кэша hub.states и hub.lastSent все узлы, которых больше нет в hub.nodes
+            activeSet := make(map[string]bool, len(hub.nodes))
+            for _, n := range hub.nodes {
+                activeSet[n.ID] = true
+                if st, ok := hub.states[n.ID]; ok {
+                    st.Config = n
                 }
             }
+            for id := range hub.states {
+                if !activeSet[id] {
+                    delete(hub.states, id)
+                }
+            }
+            for id := range hub.lastSent {
+                if !activeSet[id] {
+                    delete(hub.lastSent, id)
+                }
+            }
+
             hub.telegram = req.Telegram
             _ = hub.saveDiskLocked()
             hub.mu.Unlock()
@@ -1003,16 +1178,30 @@ func main() {
             _ = hResp.Body.Close()
         }
 
-        hasUpdate := remoteVer != "" && (!localRel.Available || localRel.Version != remoteVer)
+        hubExeURL := fmt.Sprintf("https://github.com/gresseir-dev/CoreGuard/releases/download/%s/coreguard_hub.exe", tagName)
+        hubHeadReq, _ := http.NewRequest(http.MethodHead, hubExeURL, nil)
+        hubHeadReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CoreGuard-Hub")
+        hubExeAvailable := false
+        if hhResp, hhErr := headClient.Do(hubHeadReq); hhErr == nil {
+            hubExeAvailable = (hhResp.StatusCode == http.StatusOK)
+            _ = hhResp.Body.Close()
+        }
+
+        agentUpdate := remoteVer != "" && (!localRel.Available || localRel.Version != remoteVer)
+        hasUpdate := agentUpdate
         _ = json.NewEncoder(w).Encode(map[string]interface{}{
-            "has_update":     hasUpdate,
-            "remote_version": remoteVer,
-            "local_version":  localRel.Version,
-            "local_ready":    localRel.Available,
-            "release_name":   "CoreGuard Enterprise " + tagName,
-            "html_url":       fmt.Sprintf("https://github.com/gresseir-dev/CoreGuard/releases/tag/%s", tagName),
-            "exe_available":  exeAvailable,
-            "exe_url":        exeURL,
+            "has_update":        hasUpdate,
+            "agent_update":      agentUpdate,
+            "hub_update":        hubExeAvailable && agentUpdate,
+            "remote_version":    remoteVer,
+            "local_version":     localRel.Version,
+            "hub_version":       localRel.Version,
+            "local_ready":       localRel.Available,
+            "release_name":      "CoreGuard Enterprise " + tagName,
+            "html_url":          fmt.Sprintf("https://github.com/gresseir-dev/CoreGuard/releases/tag/%s", tagName),
+            "exe_available":     exeAvailable,
+            "hub_exe_available": hubExeAvailable,
+            "exe_url":           exeURL,
         })
     })
 
@@ -1124,6 +1313,115 @@ func main() {
         })
     })
 
+    mux.HandleFunc("/api/github/self-update", func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        if r.Method != http.MethodPost {
+            http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+            return
+        }
+
+        noRedirectClient := &http.Client{
+            Timeout: 12 * time.Second,
+            CheckRedirect: func(req *http.Request, via []*http.Request) error {
+                return http.ErrUseLastResponse
+            },
+        }
+        tagReq, _ := http.NewRequest(http.MethodGet, "https://github.com/gresseir-dev/CoreGuard/releases/latest", nil)
+        tagReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CoreGuard-Hub")
+        tagResp, err := noRedirectClient.Do(tagReq)
+        if err != nil {
+            w.WriteHeader(http.StatusBadGateway)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Ошибка связи с GitHub: " + err.Error()})
+            return
+        }
+        _ = tagResp.Body.Close()
+
+        loc := tagResp.Header.Get("Location")
+        tagName := ""
+        if idx := strings.LastIndex(loc, "/tag/"); idx >= 0 {
+            tagName = strings.TrimSpace(loc[idx+5:])
+        }
+        if tagName == "" {
+            w.WriteHeader(http.StatusBadGateway)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Не найден актуальный релиз на GitHub"})
+            return
+        }
+
+        hubExeURL := fmt.Sprintf("https://github.com/gresseir-dev/CoreGuard/releases/download/%s/coreguard_hub.exe", tagName)
+        client := &http.Client{Timeout: 90 * time.Second}
+        dlReq, _ := http.NewRequest(http.MethodGet, hubExeURL, nil)
+        dlReq.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CoreGuard-Hub")
+        dlResp, err := client.Do(dlReq)
+        if err != nil {
+            w.WriteHeader(http.StatusBadGateway)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Ошибка скачивания coreguard_hub.exe: " + err.Error()})
+            return
+        }
+        defer dlResp.Body.Close()
+
+        if dlResp.StatusCode == http.StatusNotFound {
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{
+                "status":  "skipped",
+                "message": "В релизе на GitHub нет отдельного coreguard_hub.exe — обновлён только пакет агента.",
+            })
+            return
+        }
+        if dlResp.StatusCode != http.StatusOK {
+            w.WriteHeader(http.StatusBadGateway)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{
+                "error": fmt.Sprintf("GitHub вернул HTTP %d при скачивании coreguard_hub.exe", dlResp.StatusCode),
+            })
+            return
+        }
+
+        exePath, err := os.Executable()
+        if err != nil {
+            w.WriteHeader(http.StatusInternalServerError)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
+            return
+        }
+        newPath := exePath + ".new"
+        oldPath := exePath + ".old"
+
+        out, err := os.Create(newPath)
+        if err != nil {
+            w.WriteHeader(http.StatusInternalServerError)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Ошибка создания временного файла: " + err.Error()})
+            return
+        }
+        written, err := io.Copy(out, dlResp.Body)
+        _ = out.Close()
+        if err != nil || written < 1024*512 {
+            _ = os.Remove(newPath)
+            w.WriteHeader(http.StatusBadGateway)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Файл coreguard_hub.exe скачался не полностью"})
+            return
+        }
+
+        _ = os.Remove(oldPath)
+        if err := os.Rename(exePath, oldPath); err != nil {
+            _ = os.Remove(newPath)
+            w.WriteHeader(http.StatusInternalServerError)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Не удалось переименовать текущий coreguard_hub.exe: " + err.Error()})
+            return
+        }
+        if err := os.Rename(newPath, exePath); err != nil {
+            _ = os.Rename(oldPath, exePath)
+            w.WriteHeader(http.StatusInternalServerError)
+            _ = json.NewEncoder(w).Encode(map[string]interface{}{"error": "Не удалось активировать новый coreguard_hub.exe: " + err.Error()})
+            return
+        }
+
+        _ = json.NewEncoder(w).Encode(map[string]interface{}{
+            "status":  "restarting",
+            "message": "Хаб обновлён до " + tagName + ", перезапуск службы CoreGuardHub...",
+        })
+
+        go func() {
+            time.Sleep(600 * time.Millisecond)
+            os.Exit(1)
+        }()
+    })
     mux.HandleFunc("/api/release", func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Content-Type", "application/json")
         _ = json.NewEncoder(w).Encode(loadHubReleaseInfo())

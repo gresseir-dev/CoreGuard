@@ -245,10 +245,11 @@
               </label>
             </div>
           </div>
-          <div style="margin-bottom: 16px;">
+          <div style="margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
             <button class="btn" onclick="saveNodeItem()">💾 Записать узел</button>
             <button class="btn btn-secondary" onclick="resetForm()">Очистить форму</button>
-          </div>
+            <button type="button" class="btn btn-secondary" id="btn-import-fleet" onclick="triggerFleetImport()">📥 Импорт списка ПК (.json)</button>
+            </div>
           <table class="table">
             <thead><tr><th>ID</th><th>Название</th><th>Группа</th><th>Хост</th><th>Режим</th><th>Действия</th></tr></thead>
             <tbody id="nodes-table-body"></tbody>
@@ -418,6 +419,48 @@
       if (modal) modal.style.display = 'none';
     }
     let latestGithubCheck = null;
+
+        function triggerFleetImport() {
+      const inp = document.getElementById('fleet-import-file-input');
+      if (!inp) { alert('Элемент выбора файла не найден'); return; }
+      inp.value = '';
+      inp.click();
+    }
+
+    async function handleFleetFileSelected(event) {
+      const file = event && event.target && event.target.files ? event.target.files[0] : null;
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const res = await fetch('/api/nodes/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: text
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          alert('Ошибка импорта: ' + (data.error || ('HTTP ' + res.status)));
+          return;
+        }
+        alert(
+          `Импорт списка ПК завершён:\n` +
+          `• Добавлено новых узлов: ${data.added || 0}\n` +
+          `• Обновлено существующих: ${data.updated || 0}\n` +
+          `• Пропущено: ${data.skipped || 0}`
+        );
+        try {
+          const cfgRes = await fetch('/api/config');
+          if (cfgRes.ok) {
+            appConfig = await cfgRes.json();
+            if (!appConfig.nodes) appConfig.nodes = [];
+          }
+        } catch (_) {}
+        if (typeof renderNodesTable === 'function') renderNodesTable();
+        if (typeof loadHub === 'function') await loadHub();
+      } catch (e) {
+        alert('Ошибка чтения или импорта файла: ' + e);
+      }
+    }
 
     async function checkGithubRelease(manual) {
       const btn = document.getElementById('btn-check-github');
@@ -1051,5 +1094,6 @@
     </div>
   </div>
 
+<input type="file" id="fleet-import-file-input" accept=".json,application/json" style="position:fixed;left:-9999px;opacity:0;" onchange="handleFleetFileSelected(event)">
 </body>
 </html>
