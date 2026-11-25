@@ -1451,17 +1451,14 @@ func main() {
 
         go func() {
             time.Sleep(500 * time.Millisecond)
-            pid := os.Getpid()
-            psScript := fmt.Sprintf(
-                "for($i=0;$i -lt 40;$i++){ if(-not (Get-Process -Id %d -ErrorAction SilentlyContinue)){ break }; Start-Sleep -Milliseconds 200 }; net stop CoreGuardHub /y 2>$null; Start-Sleep -Milliseconds 400; for($j=0;$j -lt 10;$j++){ sc.exe start CoreGuardHub | Out-Null; Start-Sleep -Milliseconds 800; if((Get-Service -Name 'CoreGuardHub' -ErrorAction SilentlyContinue).Status -eq 'Running'){ break } }",
-                pid,
-            )
-            cmd := exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", psScript)
+            cmd := exec.Command("cmd.exe", "/C", "ping 127.0.0.1 -n 3 > nul && net start CoreGuardHub")
             cmd.SysProcAttr = &syscall.SysProcAttr{
                 HideWindow:    true,
-                CreationFlags: 0x00000008 | 0x00000200 | 0x01000000, // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB
+                CreationFlags: 0x08000000, // CREATE_NO_WINDOW (без CREATE_BREAKAWAY_FROM_JOB, который блокируется Job-объектом службы)
             }
-            _ = cmd.Start()
+            if err := cmd.Start(); err != nil {
+                log.Printf("[Hub] Ошибка запуска рестартера службы: %v", err)
+            }
             time.Sleep(300 * time.Millisecond)
             os.Exit(0)
         }()
