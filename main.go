@@ -87,7 +87,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.5.5"
+const AgentVersion = "2.5.6"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -287,7 +287,8 @@ var (
     appMutex      windows.Handle
     lockFile      *os.File
     activeLicense LicensePayload
-    tickerResetCh = make(chan time.Duration, 1)
+    tickerResetCh   = make(chan time.Duration, 1)
+    isUpdatingAgent atomic.Bool
     remoteServer  *http.Server
     popupActive   atomic.Int32
     lastPopupTime time.Time
@@ -1059,7 +1060,8 @@ func buildAppRouter() *http.ServeMux {
         }
 
         respData := map[string]interface{}{
-            "version": AgentVersion,
+            "version":             AgentVersion,
+            "updating":            isUpdatingAgent.Load(),
             "report":              globalReport,
             "history":             history,
             "config":              globalConfig,
@@ -1225,7 +1227,9 @@ func buildAppRouter() *http.ServeMux {
             return
         }
 
-        _ = os.Remove(oldPath)
+        isUpdatingAgent.Store(true)
+        time.Sleep(900 * time.Millisecond)
+
         _ = os.Remove(oldPath)
         _ = exec.Command("powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='CoreGuard.exe'\" | Where-Object { $_.CommandLine -like '*--tray*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }").Run()
         time.Sleep(250 * time.Millisecond)
@@ -1256,11 +1260,6 @@ func buildAppRouter() *http.ServeMux {
             }
             _ = os.Remove(lockPath)
             if isSvc, err := svc.IsWindowsService(); err == nil && isSvc {
-                psTray := fmt.Sprintf(`$u = (Get-CimInstance Win32_ComputerSystem).UserName; if ($u) { schtasks /Create /F /SC ONCE /ST 23:59 /TN "CoreGuardTrayRestart" /TR "\"%s\" --tray" /RU "$u" /IT | Out-Null; Start-Sleep -Seconds 3; schtasks /Run /TN "CoreGuardTrayRestart" | Out-Null }`, exePath)
-                trayCmd := exec.Command("powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command", psTray)
-                trayCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
-                _ = trayCmd.Start()
-
                 _ = exec.Command("sc.exe", "failure", "CoreGuardAgent", "reset=", "30", "actions=", "restart/1500/restart/3000/restart/5000").Run()
                 _ = exec.Command("sc.exe", "failureflag", "CoreGuardAgent", "1").Run()
                 os.Exit(1)
@@ -1465,6 +1464,27 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
 
 var isTrayOnlyMode bool
 
+func relaunchTraySelfAndExit() {
+    exePath, err := os.Executable()
+    if err != nil || exePath == "" {
+        return
+    }
+    exeDir := filepath.Dir(exePath)
+    procShellNotifyIconW.Call(NIM_DELETE, uintptr(unsafe.Pointer(&nid)))
+    if appMutex != 0 {
+        _ = windows.CloseHandle(appMutex)
+        appMutex = 0
+    }
+    cmd := exec.Command("cmd.exe", "/C", fmt.Sprintf(`ping 127.0.0.1 -n 5 > nul & start "" /D "%s" "%s" --tray`, exeDir, exePath))
+    cmd.Dir = exeDir
+    cmd.SysProcAttr = &syscall.SysProcAttr{
+        HideWindow:    true,
+        CreationFlags: 0x08000000,
+    }
+    _ = cmd.Start()
+    os.Exit(0)
+}
+
 func syncTrayFromService() {
     url := fmt.Sprintf("http://127.0.0.1:%d/api/data", LocalDashboardPort)
     client := &http.Client{Timeout: 3 * time.Second}
@@ -1484,6 +1504,13 @@ func syncTrayFromService() {
 
     var raw map[string]json.RawMessage
     if err := json.NewDecoder(resp.Body).Decode(&raw); err == nil {
+        var updating bool
+        _ = json.Unmarshal(raw["updating"], &updating)
+        if updating {
+            relaunchTraySelfAndExit()
+            return
+        }
+
         var ver string
         _ = json.Unmarshal(raw["version"], &ver)
 
@@ -1604,7 +1631,7 @@ func (s *agentWindowsService) Execute(args []string, r <-chan svc.ChangeRequest,
     if isTrayOnlyMode {
         go syncTrayFromService()
         go func() {
-            ticker := time.NewTicker(5 * time.Second)
+            ticker := time.NewTicker(700 * time.Millisecond)
             defer ticker.Stop()
             for range ticker.C {
                 syncTrayFromService()
@@ -1721,7 +1748,7 @@ func main() {
     if isTrayOnlyMode {
         go syncTrayFromService()
         go func() {
-            ticker := time.NewTicker(5 * time.Second)
+            ticker := time.NewTicker(700 * time.Millisecond)
             defer ticker.Stop()
             for range ticker.C {
                 syncTrayFromService()
