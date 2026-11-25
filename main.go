@@ -86,7 +86,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.4.3"
+const AgentVersion = "2.4.4"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -1234,18 +1234,17 @@ func buildAppRouter() *http.ServeMux {
             _ = os.Remove(lockPath)
             _ = os.Remove(exePath + ":Zone.Identifier")
 
-            psCmd := fmt.Sprintf(
-                "for($i=0;$i -lt 60;$i++){ if(-not (Get-Process -Id %d -ErrorAction SilentlyContinue)){ break }; Start-Sleep -Milliseconds 200 }; Remove-Item -LiteralPath '%s' -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 300; Start-Process -FilePath '%s' -WorkingDirectory '%s'",
-                pid,
-                strings.ReplaceAll(lockPath, "'", "''"),
-                strings.ReplaceAll(exePath, "'", "''"),
-                strings.ReplaceAll(exeDir, "'", "''"),
+            batchCmd := fmt.Sprintf(
+                `ping 127.0.0.1 -n 3 > nul & del /f /q "%s" > nul 2>&1 & schtasks /Run /TN "CoreGuardAgent" > nul 2>&1 || start "" /D "%s" "%s"`,
+                lockPath,
+                exeDir,
+                exePath,
             )
-            cmd := exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", psCmd)
+            cmd := exec.Command("cmd.exe", "/C", batchCmd)
             cmd.Dir = exeDir
             cmd.SysProcAttr = &syscall.SysProcAttr{
                 HideWindow:    true,
-                CreationFlags: 0x00000008 | 0x00000200,
+                CreationFlags: 0x08000000, // CREATE_NO_WINDOW
             }
             _ = cmd.Start()
             time.Sleep(250 * time.Millisecond)
