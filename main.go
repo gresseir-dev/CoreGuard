@@ -87,7 +87,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.5.4"
+const AgentVersion = "2.5.5"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -1502,6 +1502,91 @@ func syncTrayFromService() {
             nid.UFlags = NIF_TIP
             procShellNotifyIconW.Call(NIM_MODIFY, uintptr(unsafe.Pointer(&nid)))
         }
+
+        stateMu.RLock()
+        repCopy := globalReport
+        cfgCopy := globalConfig
+        stateMu.RUnlock()
+        evaluateTrayUserAlerts(repCopy, cfgCopy)
+    }
+}
+
+var (
+    lastTrayAlertSig string
+    lastTrayBalloon  time.Time
+)
+
+func evaluateTrayUserAlerts(report TelemetryReport, cfg Config) {
+    isRu := cfg.Language != "ENG"
+    sysHealth := report.System
+    var critReasons []string
+
+    if sysHealth.CpuState == "CRITICAL" {
+        if isRu {
+            critReasons = append(critReasons, fmt.Sprintf("• Перегрев процессора: %d°C (порог %d°C)", sysHealth.CpuTemp, cfg.CpuThreshold))
+        } else {
+            critReasons = append(critReasons, fmt.Sprintf("• CPU Overheating: %d°C (threshold %d°C)", sysHealth.CpuTemp, cfg.CpuThreshold))
+        }
+    }
+    if sysHealth.MbState == "CRITICAL" {
+        if isRu {
+            critReasons = append(critReasons, fmt.Sprintf("• Перегрев материнской платы: %d°C (порог %d°C)", sysHealth.MbTemp, cfg.MbThreshold))
+        } else {
+            critReasons = append(critReasons, fmt.Sprintf("• Motherboard Overheating: %d°C (threshold %d°C)", sysHealth.MbTemp, cfg.MbThreshold))
+        }
+    }
+    if sysHealth.SpaceState == "CRITICAL" {
+        if isRu {
+            critReasons = append(critReasons, fmt.Sprintf("• Мало места на диске C:: свободно %.1f ГБ (%.1f%%)", sysHealth.FreeGB, sysHealth.FreePercent))
+        } else {
+            critReasons = append(critReasons, fmt.Sprintf("• Low disk space on C:: %.1f GB (%.1f%%) left", sysHealth.FreeGB, sysHealth.FreePercent))
+        }
+    }
+    for _, d := range report.Drives {
+        if d.HealthState == "CRITICAL" {
+            if len(d.Alerts) > 0 {
+                for _, a := range d.Alerts {
+                    critReasons = append(critReasons, fmt.Sprintf("• Диск %s: %s", d.Model, a))
+                }
+            } else {
+                if isRu {
+                    critReasons = append(critReasons, fmt.Sprintf("• Критический сбой накопителя %s (SMART)", d.Model))
+                } else {
+                    critReasons = append(critReasons, fmt.Sprintf("• Critical drive failure on %s (SMART)", d.Model))
+                }
+            }
+        }
+    }
+
+    if len(critReasons) == 0 {
+        lastTrayAlertSig = ""
+        return
+    }
+
+    sig := strings.Join(critReasons, "|")
+    tTitle := "CoreGuard — ВНИМАНИЕ! Критический сбой оборудования!"
+    if !isRu {
+        tTitle = "CoreGuard — ALERT! Critical Hardware Issue!"
+    }
+
+    // Показываем balloon-уведомление в трее сразу при появлении сбоя или раз в 10 минут, пока сбой активен
+    if sig != lastTrayAlertSig || time.Since(lastTrayBalloon) >= 10*time.Minute {
+        lastTrayAlertSig = sig
+        lastTrayBalloon = time.Now()
+        showTrayNotification(tTitle, strings.Join(critReasons, "\n"), true)
+    }
+
+    popupEnabled := true
+    if cfg.PopupAlertEnabled != nil {
+        popupEnabled = *cfg.PopupAlertEnabled
+    }
+    repeatMin := cfg.PopupRepeatMin
+    if repeatMin <= 0 {
+        repeatMin = 60
+    }
+    if popupEnabled && time.Since(lastPopupTime) >= time.Duration(repeatMin)*time.Minute {
+        lastPopupTime = time.Now()
+        go showBlockingAlertPopup(tTitle, critReasons, cfg.MspBranding, isRu)
     }
 }
 
