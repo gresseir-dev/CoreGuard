@@ -1,5 +1,9 @@
 # Changelog — CoreGuard Enterprise
 
+## [2.4.2] — 2026-11-25
+
+### Исправления и улучшения
+- **Надёжный самоперезапуск службы Central Hub (/api/github/self-update):** завершение процесса при обновлении переведено на отвязанный от группы процессов службы фоновый сценарий (DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB), который дожидается остановки старого coreguard_hub.exe и гарантированно запускает службу CoreGuardHub заново.
 ## [2.4.1] — 2026-11-25
 
 ### Новые возможности

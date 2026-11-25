@@ -15,8 +15,10 @@ import (
     "net"
     "net/http"
     "os"
+	"os/exec"
     "path/filepath"
     "strings"
+	"syscall"
     "sync"
     "time"
 
@@ -1448,8 +1450,20 @@ func main() {
         })
 
         go func() {
-            time.Sleep(600 * time.Millisecond)
-            os.Exit(1)
+            time.Sleep(500 * time.Millisecond)
+            pid := os.Getpid()
+            psScript := fmt.Sprintf(
+                "for($i=0;$i -lt 40;$i++){ if(-not (Get-Process -Id %d -ErrorAction SilentlyContinue)){ break }; Start-Sleep -Milliseconds 200 }; net stop CoreGuardHub /y 2>$null; Start-Sleep -Milliseconds 400; for($j=0;$j -lt 10;$j++){ sc.exe start CoreGuardHub | Out-Null; Start-Sleep -Milliseconds 800; if((Get-Service -Name 'CoreGuardHub' -ErrorAction SilentlyContinue).Status -eq 'Running'){ break } }",
+                pid,
+            )
+            cmd := exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", psScript)
+            cmd.SysProcAttr = &syscall.SysProcAttr{
+                HideWindow:    true,
+                CreationFlags: 0x00000008 | 0x00000200 | 0x01000000, // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB
+            }
+            _ = cmd.Start()
+            time.Sleep(300 * time.Millisecond)
+            os.Exit(0)
         }()
     })
     mux.HandleFunc("/api/release", func(w http.ResponseWriter, r *http.Request) {
