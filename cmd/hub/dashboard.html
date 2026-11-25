@@ -659,6 +659,8 @@
         const nodes = await res.json();
         
         let total = 0, ok = 0, warn = 0, crit = 0, outdatedCount = 0;
+        const topAllInit = document.getElementById('btn-top-deploy-all');
+        if (topAllInit) topAllInit.style.display = 'none';
         updateViewToggleButtons();
         const grid = document.getElementById('nodes-grid');
         grid.innerHTML = '';
@@ -700,6 +702,12 @@
           else if (st.overall === 'CRITICAL') crit++;
           if (st.online && latestRelease.available && latestRelease.version && st.agent_version !== latestRelease.version) {
             outdatedCount++;
+            const topAll = document.getElementById('btn-top-deploy-all');
+            const topAllTxt = document.getElementById('btn-top-deploy-all-text');
+            if (topAll) {
+              topAll.style.display = 'inline-flex';
+              if (topAllTxt) topAllTxt.innerText = 'Обновить парк (' + outdatedCount + ')';
+            }
           }
 
           const card = document.createElement('div');
