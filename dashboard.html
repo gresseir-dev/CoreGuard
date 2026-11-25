@@ -557,13 +557,21 @@ async function saveSpaceThreshold() {
   saveProSettings();
 }
 
-async function saveDriveThreshold(index) {
-  const val = parseInt(document.getElementById(`thresh-input-${index}`).value, 10);
+async function saveDriveThreshold(index, btnEl) {
+  let inp = null;
+  if (btnEl && btnEl.parentElement) {
+    inp = btnEl.parentElement.querySelector('input[type="number"]');
+  }
+  if (!inp) {
+    const all = document.querySelectorAll(`#thresh-input-${index}`);
+    inp = all.length > 0 ? all[all.length - 1] : null;
+  }
+  const val = inp ? parseInt(inp.value, 10) : NaN;
   if (isNaN(val) || val < 30 || val > 75) {
     return alert(currentLang === 'RU' ? "Укажите порог от 30°C до 75°C" : "Specify a threshold from 30°C to 75°C");
   }
   driveThresholds[index] = val;
-  saveProSettings();
+  await saveProSettings();
 }
 
 async function refreshData() {
@@ -743,7 +751,7 @@ async function refreshData() {
     } else {
       drives.forEach(d => {
         const isIgnored = Boolean(ignoredDrives[d.index] || d.health_state === 'IGNORED');
-        const userCrit = driveThresholds[d.index] || 50;
+        const parsedDIdx = parseInt(String(d.device || '').replace(/\D+/g, ''), 10); const resolvedIdx = Number.isFinite(parsedDIdx) ? parsedDIdx : d.index; const userCrit = driveThresholds[resolvedIdx] ?? driveThresholds[d.index] ?? 50;
         const reallocated = d.reallocated_sectors || 0;
         const pending = d.pending_sectors || 0;
 
@@ -788,7 +796,7 @@ async function refreshData() {
                 <label style="display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--text-muted); cursor:pointer; background:rgba(255,255,255,0.04); padding:3px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.08);" title="Не учитывать этот диск в тревогах и центральном хабе"><input type="checkbox" ${isIgnored ? 'checked' : ''} onchange="toggleIgnoreDrive(${d.index}, this.checked)" style="accent-color:#64748b; cursor:pointer;"><span>${currentLang === 'RU' ? 'Игнорировать' : 'Ignore'}</span></label>
                 <div class="threshold-control">
                   ${t.lblThresh} 
-                  <input id="thresh-input-${d.index}" class="threshold-input" type="number" value="${userCrit}" min="30" max="75"> °C
+                  <input id="legacy-thresh-input-${d.index}" class="threshold-input" type="number" value="${userCrit}" min="30" max="75"> °C
                   <button class="btn-action" style="padding: 2px 8px;" onclick="saveDriveThreshold(${d.index})">OK</button>
                 </div>
                 <span class="chip" style="background:rgba(255,255,255,0.06);">${d.temperature_c}°C</span>
@@ -842,7 +850,7 @@ async function refreshData() {
 
     const labels = h.map(x => x.time_label || '');
     drives.forEach(d => {
-      const userCrit = driveThresholds[d.index] || 50;
+      const parsedDIdx = parseInt(String(d.device || '').replace(/\D+/g, ''), 10); const resolvedIdx = Number.isFinite(parsedDIdx) ? parsedDIdx : d.index; const userCrit = driveThresholds[resolvedIdx] ?? driveThresholds[d.index] ?? 50;
       let driveTemps = h.map(snap => {
         if (!snap.drives) return d.temperature_c;
         const found = snap.drives.find(dr => dr.index === d.index);
@@ -1051,7 +1059,7 @@ setInterval(refreshData, 30000);
               <div class="threshold-control" style="padding:2px 6px;">
                 <span>Порог:</span>
                 <input id="thresh-input-${driveIdx}" class="threshold-input" type="number" value="${userCrit}" min="30" max="75"> °C
-                <button type="button" class="btn-action" style="padding: 2px 8px;" onclick="saveDriveThreshold(${driveIdx}).then(() => { if (typeof renderSafeSmartBlock === 'function') renderSafeSmartBlock(); })">OK</button>
+                <button type="button" class="btn-action" style="padding: 2px 8px;" onclick="saveDriveThreshold(${driveIdx}, this).then(() => { if (typeof renderSafeSmartBlock === 'function') renderSafeSmartBlock(); })">OK</button>
               </div>
             </div>
 

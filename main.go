@@ -87,7 +87,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.5.2"
+const AgentVersion = "2.5.3"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -1127,7 +1127,7 @@ func buildAppRouter() *http.ServeMux {
                 newInterval := time.Duration(globalConfig.PollIntervalMin) * time.Minute
                 stateMu.Unlock()
 
-                tickerResetCh <- newInterval
+                select { case tickerResetCh <- newInterval: default: }
                 syncRemoteServer()
                 go runCheckCycle()
             }
