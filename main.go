@@ -87,7 +87,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.4.10"
+const AgentVersion = "2.4.11"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -1226,6 +1226,9 @@ func buildAppRouter() *http.ServeMux {
         }
 
         _ = os.Remove(oldPath)
+        _ = os.Remove(oldPath)
+        _ = exec.Command("powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='CoreGuard.exe'\" | Where-Object { $_.CommandLine -like '*--tray*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }").Run()
+        time.Sleep(250 * time.Millisecond)
         if err := os.Rename(exePath, oldPath); err != nil {
             _ = os.Remove(newPath)
             http.Error(w, "Rename current failed: "+err.Error(), http.StatusInternalServerError)
