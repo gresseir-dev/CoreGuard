@@ -1,10 +1,10 @@
 {
   "client_organization": "Моя Организация",
   "msp_branding": {
-    "company_name": "",
-    "support_phone": "",
-    "support_telegram": "",
-    "support_email": "",
+    "company_name": "gresseir-dev",
+    "support_phone": "+7 (912) 080-41-50",
+    "support_telegram": "@gresseir",
+    "support_email": "coreguard.support@gmail.com",
     "website": ""
   },
   "mode": "ENTERPRISE",
