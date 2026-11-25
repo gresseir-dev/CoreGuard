@@ -1,11 +1,8 @@
 *.exe
-!*Setup*.exe
-*.zip
-*.tar.gz
-*.bak
+*.old
 *.log
-*.lock
-history.json
-nodes.json
-hub_config.json
-hub_events.json
+*.db
+*.sqlite
+Output/
+releases/
+tmp/
