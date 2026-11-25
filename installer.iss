@@ -4,7 +4,7 @@
 ; =====================================================================
 
 #define MyAppName "CoreGuard Enterprise"
-#define MyAppVersion "2.4.6"
+#define MyAppVersion "2.4.7"
 #define MyAppPublisher "CoreGuard"
 #define MyAppExeName "CoreGuard.exe"; Components: agent
 #define MyHubExeName "coreguard_hub.exe"; Components: hub
@@ -68,7 +68,10 @@ Name: "{group}\Веб-панель CoreGuard Hub"; Filename: "http://localhost:9
 Name: "{autodesktop}\Веб-панель CoreGuard Hub"; Filename: "http://localhost:9090"; Tasks: desktopicon; Components: hub
 
 [Run]
-Filename: "schtasks.exe"; Parameters: "/Create /TN ""CoreGuardAgent"" /TR ""\""{app}\CoreGuard.exe\"""" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden; Components: agent
+Filename: "{sys}\\sc.exe"; Parameters: "create CoreGuardAgent binPath= ""{app}\\CoreGuard.exe"" start= auto DisplayName= ""CoreGuard Monitoring Agent"""; Flags: runhidden; StatusMsg: "Регистрация службы CoreGuardAgent..."; Components: agent
+Filename: "{sys}\\sc.exe"; Parameters: "failure CoreGuardAgent reset= 30 actions= restart/1500/restart/3000/restart/5000"; Flags: runhidden; Components: agent
+Filename: "{sys}\\sc.exe"; Parameters: "failureflag CoreGuardAgent 1"; Flags: runhidden; Components: agent
+Filename: "{sys}\\sc.exe"; Parameters: "start CoreGuardAgent"; Flags: runhidden; StatusMsg: "Запуск службы CoreGuardAgent..."; Components: agent
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""CoreGuard Agent TCP 48123"" dir=in action=allow protocol=TCP localport=48123 profile=any"; Flags: runhidden; Components: agent
 ; 1. Принудительная зачистка зависших процессов перед регистрацией и стартом
 Filename: "{cmd}"; Parameters: "/c taskkill /f /im {#MyAppExeName} /im {#MyHubExeName} 2>nul || exit 0"; Flags: runhidden; StatusMsg: "Проверка и освобождение портов..."
@@ -80,13 +83,14 @@ Filename: "{sys}\sc.exe"; Parameters: "create {#MyServiceName} binPath= ""{app}\
 Filename: "{sys}\sc.exe"; Parameters: "start {#MyServiceName}"; Flags: runhidden; StatusMsg: "Запуск службы CoreGuardHub..."; Components: hub
 
 ; 4. Запуск агента с правами администратора
-Filename: "{app}\{#MyAppExeName}"; Flags: nowait postinstall; Description: "Запустить CoreGuard Agent"
+; Агент запускается автоматически как системная служба CoreGuardAgent
 
 ; 5. Автоматическое открытие веб-панели мониторинга в браузере
 Filename: "http://localhost:9090"; Flags: shellexec runmaximized postinstall; Description: "Открыть панель мониторинга Hub (http://localhost:9090)"; Components: hub
 
 [UninstallRun]
-Filename: "schtasks.exe"; Parameters: "/Delete /TN ""CoreGuardAgent"" /F"; Flags: runhidden; Components: agent; RunOnceId: "cg_uninst_1"
+Filename: "{sys}\\net.exe"; Parameters: "stop CoreGuardAgent"; Flags: runhidden; Components: agent; RunOnceId: "cg_uninst_1"
+Filename: "{sys}\\sc.exe"; Parameters: "delete CoreGuardAgent"; Flags: runhidden; Components: agent; RunOnceId: "cg_uninst_1b"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""CoreGuard Agent TCP 48123"""; Flags: runhidden; Components: agent; RunOnceId: "cg_uninst_fw"
 ; 1. Синхронная остановка службы (net stop ожидает фактического завершения процесса)
 Filename: "{sys}\net.exe"; Parameters: "stop {#MyServiceName}"; Flags: runhidden; RunOnceId: "cg_uninst_2"

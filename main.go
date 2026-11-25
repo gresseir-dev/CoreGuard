@@ -26,6 +26,7 @@ import (
     "unsafe"
 
     "golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/svc"
 )
 var (
     prevIdleTime   uint64
@@ -86,7 +87,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.4.6"
+const AgentVersion = "2.4.7"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -1237,15 +1238,17 @@ func buildAppRouter() *http.ServeMux {
                 _ = windows.CloseHandle(appMutex)
                 appMutex = 0
             }
-            batchCmd := fmt.Sprintf(
-                `ping 127.0.0.1 -n 4 > nul & del /f /q "%s" > nul 2>&1 & schtasks /Run /TN "CoreGuardAgent" > nul 2>&1`,
-                lockPath,
-            )
-            cmd := exec.Command("cmd.exe", "/C", batchCmd)
+            _ = os.Remove(lockPath)
+            if isSvc, err := svc.IsWindowsService(); err == nil && isSvc {
+                _ = exec.Command("sc.exe", "failure", "CoreGuardAgent", "reset=", "30", "actions=", "restart/1500/restart/3000/restart/5000").Run()
+                _ = exec.Command("sc.exe", "failureflag", "CoreGuardAgent", "1").Run()
+                os.Exit(1)
+            }
+            cmd := exec.Command("cmd.exe", "/C", fmt.Sprintf(`ping 127.0.0.1 -n 3 > nul & start "" /D "%s" "%s"`, exeDir, exePath))
             cmd.Dir = exeDir
             cmd.SysProcAttr = &syscall.SysProcAttr{
                 HideWindow:    true,
-                CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+                CreationFlags: 0x08000000,
             }
             _ = cmd.Start()
             time.Sleep(250 * time.Millisecond)
@@ -1435,9 +1438,57 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
     return ret
 }
 
+type agentWindowsService struct{}
+
+func (s *agentWindowsService) Execute(args []string, r <-chan svc.ChangeRequest, changes chan<- svc.Status) (bool, uint32) {
+    const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown
+    changes <- svc.Status{State: svc.StartPending}
+
+    loadConfig()
+    loadHistory()
+    startLocalWebServer()
+    syncRemoteServer()
+
+    go runCheckCycle()
+
+    go func() {
+        currentDur := time.Duration(globalConfig.PollIntervalMin) * time.Minute
+        ticker := time.NewTicker(currentDur)
+        defer ticker.Stop()
+
+        for {
+            select {
+            case newDur := <-tickerResetCh:
+                ticker.Stop()
+                ticker = time.NewTicker(newDur)
+            case <-ticker.C:
+                runCheckCycle()
+            }
+        }
+    }()
+
+    changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
+
+    for {
+        req := <-r
+        switch req.Cmd {
+        case svc.Interrogate:
+            changes <- req.CurrentStatus
+        case svc.Stop, svc.Shutdown:
+            changes <- svc.Status{State: svc.StopPending}
+            return false, 0
+        }
+    }
+}
+
 func main() {
     if exe, err := os.Executable(); err == nil {
         _ = os.Remove(exe + ".old")
+    }
+
+    if isService, err := svc.IsWindowsService(); err == nil && isService {
+        _ = svc.Run("CoreGuardAgent", &agentWindowsService{})
+        return
     }
     runtime.LockOSThread()
 
