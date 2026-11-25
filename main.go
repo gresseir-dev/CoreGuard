@@ -96,7 +96,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.3.32"
+const AgentVersion = "2.3.33"
 
 const LicensePublicKeyHex = "001594263b9744110c1cbb9a968ea685e14ed9b4e44cdd860e79f4d81d8b3461"
 
@@ -1335,24 +1335,28 @@ func buildAppRouter() *http.ServeMux {
         _, _ = w.Write([]byte(`{"status":"restarting"}`))
 
         go func() {
-            time.Sleep(800 * time.Millisecond)
+            time.Sleep(700 * time.Millisecond)
             pid := os.Getpid()
             exeDir := filepath.Dir(exePath)
-            // Отвязанный скрипт ждёт полного завершения старого PID (освобождения мьютекса и порта 48123), затем запускает новый exe из его папки
+            lockPath := filepath.Join(exeDir, "coreguard.lock")
+            _ = os.Remove(lockPath)
+            _ = os.Remove(exePath + ":Zone.Identifier")
+
             psCmd := fmt.Sprintf(
-                "for($i=0;$i -lt 40;$i++){ if(-not (Get-Process -Id %d -ErrorAction SilentlyContinue)){ break }; Start-Sleep -Milliseconds 250 }; Start-Sleep -Milliseconds 400; Start-Process -FilePath '%s' -WorkingDirectory '%s'",
+                "for($i=0;$i -lt 50;$i++){ if(-not (Get-Process -Id %d -ErrorAction SilentlyContinue)){ break }; Start-Sleep -Milliseconds 250 }; Remove-Item -LiteralPath '%s' -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 300; cmd.exe /c start \"\" /D \"%s\" \"%s\"",
                 pid,
-                strings.ReplaceAll(exePath, "'", "''"),
-                strings.ReplaceAll(exeDir, "'", "''"),
+                strings.ReplaceAll(lockPath, "'", "''"),
+                strings.ReplaceAll(exeDir, "\"", "\\\""),
+                strings.ReplaceAll(exePath, "\"", "\\\""),
             )
             cmd := exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", psCmd)
             cmd.Dir = exeDir
             cmd.SysProcAttr = &syscall.SysProcAttr{
                 HideWindow:    true,
-                CreationFlags: 0x00000008 | 0x00000200, // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+                CreationFlags: 0x00000008 | 0x00000200,
             }
             _ = cmd.Start()
-            time.Sleep(300 * time.Millisecond)
+            time.Sleep(250 * time.Millisecond)
             os.Exit(0)
         }()
     })
