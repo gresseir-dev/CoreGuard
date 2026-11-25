@@ -1,5 +1,11 @@
 # Changelog — CoreGuard Enterprise
 
+## What's New in CoreGuard Enterprise v2.5.7 (2026-11-26)
+
+### Исправления и защита от ложных срабатываний
+- **Глобальный мьютекс значка трея ('Global\\CoreGuardEnterpriseTrayMutex'):** исключено появление дублирующихся процессов 'CoreGuard.exe --tray' между разными контекстами запуска.
+- **Безопасный прямой перезапуск трея без 'cmd.exe':** при OTA-обновлении служба сначала активирует новый бинарник через переименование '.old', после чего трей-клиент напрямую запускает обновлённый 'CoreGuard.exe --tray' без вызова 'cmd.exe /C ping', устраняя ложное срабатывание эвристики Microsoft Defender ('Behavior:Win32/Persistence.A!ml').
+- **Исключение каталога установки в инсталляторе ('installer.iss'):** при установке агента папка '{app}' автоматически добавляется в исключения Microsoft Defender.
 ## What's New in CoreGuard Enterprise v2.5.6 (2026-11-25)
 
 ### Исправления
