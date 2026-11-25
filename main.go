@@ -86,7 +86,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.4.4"
+const AgentVersion = "2.4.5"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -1233,11 +1233,13 @@ func buildAppRouter() *http.ServeMux {
             _ = os.Remove(lockPath)
             _ = os.Remove(exePath + ":Zone.Identifier")
 
+            if appMutex != 0 {
+                _ = windows.CloseHandle(appMutex)
+                appMutex = 0
+            }
             batchCmd := fmt.Sprintf(
-                `ping 127.0.0.1 -n 3 > nul & del /f /q "%s" > nul 2>&1 & schtasks /Run /TN "CoreGuardAgent" > nul 2>&1 || start "" /D "%s" "%s"`,
+                `ping 127.0.0.1 -n 3 > nul & del /f /q "%s" > nul 2>&1 & schtasks /End /TN "CoreGuardAgent" > nul 2>&1 & ping 127.0.0.1 -n 2 > nul & schtasks /Run /TN "CoreGuardAgent" > nul 2>&1`,
                 lockPath,
-                exeDir,
-                exePath,
             )
             cmd := exec.Command("cmd.exe", "/C", batchCmd)
             cmd.Dir = exeDir

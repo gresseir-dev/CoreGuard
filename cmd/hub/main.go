@@ -18,7 +18,6 @@ import (
 	"os/exec"
     "path/filepath"
     "strings"
-	"syscall"
     "sync"
     "time"
 
@@ -1451,16 +1450,9 @@ func main() {
 
         go func() {
             time.Sleep(500 * time.Millisecond)
-            cmd := exec.Command("cmd.exe", "/C", "ping 127.0.0.1 -n 3 > nul && net start CoreGuardHub")
-            cmd.SysProcAttr = &syscall.SysProcAttr{
-                HideWindow:    true,
-                CreationFlags: 0x08000000, // CREATE_NO_WINDOW (без CREATE_BREAKAWAY_FROM_JOB, который блокируется Job-объектом службы)
-            }
-            if err := cmd.Start(); err != nil {
-                log.Printf("[Hub] Ошибка запуска рестартера службы: %v", err)
-            }
-            time.Sleep(300 * time.Millisecond)
-            os.Exit(0)
+            _ = exec.Command("sc.exe", "failure", "CoreGuardHub", "reset=", "30", "actions=", "restart/1500/restart/3000/restart/5000").Run()
+            _ = exec.Command("sc.exe", "failureflag", "CoreGuardHub", "1").Run()
+            os.Exit(1)
         }()
     })
     mux.HandleFunc("/api/release", func(w http.ResponseWriter, r *http.Request) {
