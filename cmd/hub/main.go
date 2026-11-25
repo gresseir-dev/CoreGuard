@@ -946,7 +946,7 @@ func main() {
                 Host:           hostAddr,
                 AuthUser:       defaultUser,
                 AuthPass:       defaultPass,
-                AlertOnOffline: true,
+                AlertOnOffline: false,
             }
             hub.nodes = append(hub.nodes, nc)
             hub.states[nodeID] = &NodeStatus{
