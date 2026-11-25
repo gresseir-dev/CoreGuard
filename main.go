@@ -87,7 +87,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.5.0"
+const AgentVersion = "2.5.1"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -1256,6 +1256,11 @@ func buildAppRouter() *http.ServeMux {
             }
             _ = os.Remove(lockPath)
             if isSvc, err := svc.IsWindowsService(); err == nil && isSvc {
+                psTray := fmt.Sprintf(`$u = (Get-CimInstance Win32_ComputerSystem).UserName; if ($u) { schtasks /Create /F /SC ONCE /ST 23:59 /TN "CoreGuardTrayRestart" /TR "\"%s\" --tray" /RU "$u" /IT | Out-Null; Start-Sleep -Seconds 3; schtasks /Run /TN "CoreGuardTrayRestart" | Out-Null }`, exePath)
+                trayCmd := exec.Command("powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command", psTray)
+                trayCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
+                _ = trayCmd.Start()
+
                 _ = exec.Command("sc.exe", "failure", "CoreGuardAgent", "reset=", "30", "actions=", "restart/1500/restart/3000/restart/5000").Run()
                 _ = exec.Command("sc.exe", "failureflag", "CoreGuardAgent", "1").Run()
                 os.Exit(1)
