@@ -211,6 +211,36 @@ func (h *HubManager) LoadSettings() {
         }
     }
 
+    // Если рядом с бинарником Хаба лежит msp_profile.json (подложенный инсталлятором),
+    // применяем реквизиты обслуживающей организации и удаляем одноразовый файл профиля.
+    mspProfilePath := filepath.Join(filepath.Dir(h.settingsPath), "msp_profile.json")
+    if mspRaw, err := os.ReadFile(mspProfilePath); err == nil {
+        mspRaw = bytes.TrimPrefix(mspRaw, []byte{0xEF, 0xBB, 0xBF})
+        var mp struct {
+            CompanyName     string `json:"company_name"`
+            SupportPhone    string `json:"support_phone"`
+            SupportTelegram string `json:"support_telegram"`
+            SupportEmail    string `json:"support_email"`
+        }
+        if json.Unmarshal(mspRaw, &mp) == nil {
+            if strings.TrimSpace(mp.CompanyName) != "" {
+                h.mspBranding.CompanyName = strings.TrimSpace(mp.CompanyName)
+            }
+            if strings.TrimSpace(mp.SupportPhone) != "" {
+                h.mspBranding.SupportPhone = strings.TrimSpace(mp.SupportPhone)
+            }
+            if strings.TrimSpace(mp.SupportTelegram) != "" {
+                h.mspBranding.SupportTelegram = strings.TrimSpace(mp.SupportTelegram)
+            }
+            if strings.TrimSpace(mp.SupportEmail) != "" {
+                h.mspBranding.SupportEmail = strings.TrimSpace(mp.SupportEmail)
+            }
+            _ = h.saveDiskLocked()
+            _ = os.Remove(mspProfilePath)
+            log.Printf("[Hub] Применён профиль обслуживающей организации из msp_profile.json (%s)", h.mspBranding.CompanyName)
+        }
+    }
+
     evData, err := os.ReadFile(h.eventsPath)
     if err == nil {
         _ = json.Unmarshal(evData, &h.events)

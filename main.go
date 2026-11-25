@@ -86,7 +86,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.4.0"
+const AgentVersion = "2.4.1"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
