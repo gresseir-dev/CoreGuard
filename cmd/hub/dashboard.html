@@ -122,6 +122,7 @@
           <button type="button" id="btn-check-github" onclick="closeReleaseMenu(); checkGithubRelease(true);" style="width:100%; text-align:left; background:transparent; border:none; color:var(--text); padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13px; display:flex; align-items:center; gap:8px;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
             <span>🔄</span><span>Проверить релиз на GitHub</span>
           </button>
+          <button type="button" id="menu-update-release" onclick="closeReleaseMenu(); installFullRelease();" style="display:none; width:100%; text-align:left; background:rgba(37,99,235,0.2); border:none; color:#93c5fd; padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600; align-items:center; gap:8px; margin-top:2px;"><span>⬇️</span><span id="menu-update-release-text">Обновить релиз</span></button>
           <button type="button" id="btn-deploy-all" onclick="closeReleaseMenu(); deployAllOutdated();" style="display:none; width:100%; text-align:left; background:rgba(217,119,6,0.16); border:none; color:#fcd34d; padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600; align-items:center; gap:8px; margin-top:2px;" onmouseover="this.style.background='rgba(217,119,6,0.28)'" onmouseout="this.style.background='rgba(217,119,6,0.16)'">
             <span>🚀</span><span id="btn-deploy-all-text">Обновить устаревшие (0)</span>
           </button>
@@ -147,7 +148,7 @@
     </div>
     <div style="display:flex; align-items:center; gap:8px;">
       <a id="gh-banner-link" href="#" target="_blank" style="color:#93c5fd; font-size:12px; text-decoration:none; padding:6px 10px;">Описание на GitHub ↗</a>
-      <button type="button" class="btn" id="btn-sync-github" onclick="syncGithubRelease()" style="background:#2563eb; color:#fff; font-weight:600;">⬇️ Загрузить в Хаб</button>
+      <button type="button" class="btn" id="btn-sync-github" onclick="installFullRelease()" style="background:#2563eb; color:#fff; font-weight:600;">⬇️ Загрузить в Хаб</button>
       <button type="button" onclick="document.getElementById('github-update-banner').style.display='none'" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:16px; padding:4px 6px;" title="Скрыть">✕</button>
     </div>
   </div>
