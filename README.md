@@ -1,56 +1,56 @@
 # CoreGuard Enterprise
 
-**CoreGuard Enterprise** — система мониторинга состояния накопителей (**S.M.A.R.T.**), температур (**ЦП**, **системная плата**, **накопители**), свободного места на системном разделе и централизованного управления парком ПК и серверов на базе **Windows** (включая Windows Server и рабочие станции).
+**CoreGuard Enterprise** — система мониторинга состояния накопителей (**S.M.A.R.T.**), температур (**ЦП**, **системная плата**, **накопители**), свободного места на системном разделе и централизованного управления парком ПК и серверов на базе **Windows** (Windows Server и рабочие станции).
 
-Актуальная версия релиза: **v2.3.31** • Лицензия: **GNU GPLv3** • Репозиторий: [github.com/gresseir-dev/CoreGuard](https://github.com/gresseir-dev/CoreGuard)
+**CoreGuard Enterprise** is a centralized hardware health, **S.M.A.R.T.** storage diagnostics, thermal monitoring (**CPU**, **motherboard**, **drives**), and fleet management platform for **Windows** workstations and servers.
 
----
-
-## Основные возможности
-
-* **Централизованный мониторинг (Central Hub + Agent):**
-  * **CoreGuard Central Hub** (веб-панель на порту 9090) опрашивает агентов по HTTP с **Basic Auth** (по умолчанию порт 48123), агрегирует статусы (HEALTHY, WARNING, CRITICAL), счётчики узлов и журнал инцидентов.
-  * **Автоматическая инициализация локального узла (local-pc):** при первом запуске Хаба с пустым списком узлов автоматически создаётся узел 127.0.0.1:48123 с подхватом порта, логина и пароля из соседнего config.json, а при сохранении конфигурации локальный узел защищён от случайного удаления.
-* **Единое OTA-обновление релиза и агентов через GitHub Releases:**
-  * В меню **📦 Релиз** (а также в баннере уведомлений) доступна проверка выпусков на GitHub и **единая кнопка обновления релиза**, которая обновляет пакет агента (CoreGuard.exe в eleases/ с контролем **SHA-256**) и при наличии нового бинарника Хаба обновляет coreguard_hub.exe с автоматическим перезапуском службы CoreGuardHub.
-  * Массовая или точечная раскатка обновления агентов по сети в один клик с ожиданием корректного завершения старого процесса и запуском новой версии.
-* **Продуманный интерфейс и уведомления:**
-  * Двухуровневая шапка карточек узлов (имя и статус в верхней строке; группа, адрес, бейдж версии и индикатор неподтверждённого сбоя ниже), режимы отображения сеткой и списком, журнал тревог и интеграция с **Telegram**.
-  * Встроенные разделы **«Краткая справка»** и **«О программе»** прямо в меню **«Релиз»**, а также настройка брендинга MSP / обслуживаемой организации.
-* **Удобный инсталлятор Windows:**
-  * Позволяет выбрать компоненты **Агент** и **Центральный Хаб** (CoreGuardHub), при этом галочка создания ярлыка на рабочем столе по умолчанию снята (unchecked) для аккуратного развёртывания на серверах и рабочих станциях.
+Актуальная версия / Current Release: **v2.5.1** • Лицензия / License: **GNU GPLv3** • Репозиторий / Repository: [github.com/gresseir-dev/CoreGuard](https://github.com/gresseir-dev/CoreGuard)
 
 ---
 
-## Быстрый старт
+## Русский — Архитектура и возможности
 
-1. Скачайте актуальный установщик CoreGuard_Setup_v2.3.31_x64.exe со страницы [Releases](https://github.com/gresseir-dev/CoreGuard/releases) и запустите от имени Администратора.
+### Системные службы Windows и клиент трея
+1. **CoreGuardHub ('coreguard_hub.exe')** — центральный сервер управления и оркестрации (веб-панель по умолчанию на порту '9090'). Опрашивает агентов по HTTP с Basic Auth (порт '48123'), агрегирует статусы ('HEALTHY', 'WARNING', 'CRITICAL'), управляет журналом инцидентов и кеширует релизы с GitHub.
+2. **CoreGuardAgent ('CoreGuard.exe')** — фоновая системная служба мониторинга Windows (работает в Сессии 0 с момента загрузки ОС, ещё до входа пользователя в систему). При OTA-обновлении перезапускается средствами Windows SCM Recovery ('sc failure' + 'os.Exit(1)').
+3. **Клиент системного трея ('CoreGuard.exe --tray')** — лёгкий интерфейс в сессии пользователя (автозапуск через 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'). Синхронизируется со службой по 'http://127.0.0.1:<порт>/api/data', отображает состояние дисков во всплывающей подсказке, открывает локальный дашборд в один клик и автоматически восстанавливается после обновления службы.
+
+### Основные возможности
+- **Единое OTA-обновление через GitHub Releases:** проверка выпусков в меню **📦 Релиз**, загрузка пакетов с проверкой **SHA-256**, обновление самого Хаба и массовая или точечная раскатка обновлений на агентов.
+- **Интерфейс и оповещения:** карточки узлов с отображением версии и статуса сбоев, режим списка/сетки, интеграция с **Telegram** и настройка брендинга MSP / обслуживаемой организации.
+- **Чистый дистрибутив Windows:** инсталлятор 'CoreGuard_Setup_v2.5.1_x64.exe' устанавливает только основные компоненты (**Агент** и **Центральный Хаб**).
+
+### Опциональные утилиты ('utils/')
+Дополнительные инструменты вынесены из основного дистрибутива в каталог 'utils/' (и прикладываются отдельно к релизам GitHub):
+- **'utils/coreguard_scanner.exe'** — консольный сетевой сканер подсети для быстрого обнаружения рабочих станций, серверов и развёрнутых агентов CoreGuard по порту '48123'.
+- **'utils/coreguard_msp_setup.exe'** — утилита подготовки и генерации профилей MSP / корпоративного брендинга ('msp_profile.json') для массового развёртывания инсталлятора на парке клиентов.
+
+---
+
+## English — Architecture & Features
+
+### Windows Services & System Tray Client
+1. **CoreGuardHub ('coreguard_hub.exe')** — central management server and web dashboard (default port '9090'). Polls agents over HTTP with Basic Auth (port '48123'), aggregates health states ('HEALTHY', 'WARNING', 'CRITICAL'), tracks incidents, and caches GitHub release packages.
+2. **CoreGuardAgent ('CoreGuard.exe')** — background Windows Service running in Session 0 from system boot (before user logon). Performs S.M.A.R.T., thermal, and disk capacity checks and leverages native Windows SCM Recovery ('sc failure' + 'os.Exit(1)') for reliable self-updates.
+3. **System Tray Client ('CoreGuard.exe --tray')** — lightweight user-session tray applet registered via 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'. Polls the local service at 'http://127.0.0.1:<port>/api/data', displays live drive health tooltips, opens the local dashboard, and automatically restarts after service updates.
+
+### Key Features
+- **One-Click OTA Updates via GitHub Releases:** check releases from the **📦 Release** menu, verify **SHA-256** checksums, self-update the Hub service, and push updates to single or multiple remote agents.
+- **Clean Windows Installer:** 'CoreGuard_Setup_v2.5.1_x64.exe' installs only the core components (**Agent** and **Central Hub**).
+
+### Optional Utilities ('utils/')
+Standalone administrative tools are separated from the main installer into the 'utils/' directory (and attached separately to GitHub Releases):
+- **'utils/coreguard_scanner.exe'** — CLI network subnet scanner for discovering Windows hosts and active CoreGuard agents on port '48123'.
+- **'utils/coreguard_msp_setup.exe'** — MSP / enterprise branding profile generator ('msp_profile.json') for automated multi-client installer deployments.
+
+---
+
+## Быстрый старт / Quick Start
+
+1. Скачайте установщик 'CoreGuard_Setup_v2.5.1_x64.exe' со страницы [Releases](https://github.com/gresseir-dev/CoreGuard/releases) и запустите от имени Администратора.
 2. Выберите нужные компоненты (**Агент**, **Центральный Хаб** или оба на одном сервере).
-3. Откройте веб-интерфейс Центрального Хаба: http://localhost:9090.
-4. Перейдите в **⚙ Настройки & Узлы** для добавления удалённых узлов (<IP/имя>:48123), настройки Telegram-оповещений и параметров организации.
+3. Откройте веб-панель Центрального Хаба: 'http://localhost:9090'.
 
----
+## История изменений / Changelog
 
-## Сборка из исходного кода
-
-\\\powershell
-Set-Location "C:\CoreGuard"
-.\build.ps1
-\\\
-
-Скрипт синхронизирует версию релиза, собирает агента (CoreGuard.exe), Хаб (coreguard_hub.exe), обновляет каталог eleases/ и формирует установочный пакет.
-
-## История изменений (What's New)
-
-Полный список изменений по версиям доступен в файле [CHANGELOG.md](CHANGELOG.md).
-
-## Архитектура и службы Windows (v2.5.0)
-
-CoreGuard Enterprise построен на базе двух системных служб Windows и лёгкого клиента области уведомлений:
-
-1. **CoreGuardHub ('coreguard_hub.exe')** — центральный сервер управления и оркестрации (веб-интерфейс по умолчанию на порту '9090'). Управляет парком агентов, кеширует пакеты релизов с GitHub и запускает удалённые обновления.
-2. **CoreGuardAgent ('CoreGuard.exe')** — фоновая служба мониторинга на целевых рабочих станциях и серверах. Работает в Сессии 0 с момента старта ОС, собирает телеметрию дисков и S.M.A.R.T., обслуживает локальный веб-интерфейс и порт удалённого управления ('48123'), а после автообновления перезапускается средствами Windows SCM Recovery.
-3. **Клиент системного трея ('CoreGuard.exe --tray')** — лёгкий интерфейс в сессии пользователя (автозапуск через 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'). Синхронизируется со службой по '[http://127.0.0.1](http://127.0.0.1):<LocalDashboardPort>/api/data', отображает состояние системы во всплывающей подсказке и открывает локальный дашборд.
-
-### Быстрая проверка служб
-    Get-Service CoreGuardHub, CoreGuardAgent
+Полный журнал изменений доступен в файле [CHANGELOG.md](CHANGELOG.md).
