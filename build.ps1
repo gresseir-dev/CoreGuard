@@ -93,6 +93,14 @@ if (Test-Path "C:\CoreGuardBackup\main.go") {
 
     Write-Host "[2/3] Compiling coreguard_hub.exe (x64)..." -ForegroundColor Yellow
     Push-Location "C:\CoreGuard\cmd\hub"
+$issContentForHub = [System.IO.File]::ReadAllText("C:\CoreGuard\installer.iss", [System.Text.Encoding]::UTF8)
+if ($issContentForHub -match '#define MyAppVersion "([^"]+)"') {
+    $hubSyncVer = $Matches[1]
+    $hmPath = "C:\CoreGuard\cmd\hub\main.go"
+    $hmText = [System.IO.File]::ReadAllText($hmPath, [System.Text.Encoding]::UTF8)
+    $hmText = [regex]::Replace($hmText, 'const HubVersion = "[^"]+"', "const HubVersion = `"$hubSyncVer`"")
+    [System.IO.File]::WriteAllText($hmPath, $hmText, (New-Object System.Text.UTF8Encoding $false))
+}
     go build -o "C:\CoreGuard\coreguard_hub.exe" .
     $hubExit = $LASTEXITCODE
     Pop-Location
