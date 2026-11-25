@@ -87,7 +87,7 @@ var embeddedDashboard []byte
 //go:embed app.ico
 var embeddedIcon []byte
 
-const AgentVersion = "2.5.6"
+const AgentVersion = "2.5.7"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -322,7 +322,7 @@ func applyLicenseConstraints() {
 
 func acquireSingleInstanceGuard() bool {
     if isTrayOnlyMode {
-        tName, _ := windows.UTF16PtrFromString(`Local\CoreGuardEnterpriseTrayMutex`)
+        tName, _ := windows.UTF16PtrFromString(`Global\CoreGuardEnterpriseTrayMutex`)
         hTrayMutex, _, _ := procCreateMutexW.Call(0, 1, uintptr(unsafe.Pointer(tName)))
         lastErr, _, _ := procGetLastError.Call()
         const ERROR_ALREADY_EXISTS = 183
@@ -1227,12 +1227,7 @@ func buildAppRouter() *http.ServeMux {
             return
         }
 
-        isUpdatingAgent.Store(true)
-        time.Sleep(900 * time.Millisecond)
-
         _ = os.Remove(oldPath)
-        _ = exec.Command("powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='CoreGuard.exe'\" | Where-Object { $_.CommandLine -like '*--tray*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }").Run()
-        time.Sleep(250 * time.Millisecond)
         if err := os.Rename(exePath, oldPath); err != nil {
             _ = os.Remove(newPath)
             http.Error(w, "Rename current failed: "+err.Error(), http.StatusInternalServerError)
@@ -1243,6 +1238,10 @@ func buildAppRouter() *http.ServeMux {
             http.Error(w, "Activate new failed: "+err.Error(), http.StatusInternalServerError)
             return
         }
+        _ = os.Remove(exePath + ":Zone.Identifier")
+
+        isUpdatingAgent.Store(true)
+        time.Sleep(1100 * time.Millisecond)
 
         w.Header().Set("Content-Type", "application/json")
         _, _ = w.Write([]byte(`{"status":"restarting"}`))
@@ -1469,13 +1468,17 @@ func relaunchTraySelfAndExit() {
     if err != nil || exePath == "" {
         return
     }
-    exeDir := filepath.Dir(exePath)
+    // Если текущий бинарник уже переименован в CoreGuard.exe.old, запускаем свежий CoreGuard.exe
+    targetExe := strings.TrimSuffix(exePath, ".old")
+    exeDir := filepath.Dir(targetExe)
+
     procShellNotifyIconW.Call(NIM_DELETE, uintptr(unsafe.Pointer(&nid)))
     if appMutex != 0 {
         _ = windows.CloseHandle(appMutex)
         appMutex = 0
     }
-    cmd := exec.Command("cmd.exe", "/C", fmt.Sprintf(`ping 127.0.0.1 -n 5 > nul & start "" /D "%s" "%s" --tray`, exeDir, exePath))
+
+    cmd := exec.Command(targetExe, "--tray")
     cmd.Dir = exeDir
     cmd.SysProcAttr = &syscall.SysProcAttr{
         HideWindow:    true,
