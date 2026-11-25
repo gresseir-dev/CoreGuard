@@ -1,8 +1,13 @@
 *.exe
 *.old
+*.zip
 *.log
 *.db
 *.sqlite
+*.lock
 Output/
 releases/
+Temp/
 tmp/
+history.json
+msp_profile.json
