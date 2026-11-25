@@ -1,6 +1,6 @@
 ; =====================================================================
 ; CoreGuard Enterprise Installer Script (Inno Setup 6)
-; Product: CoreGuard Enterprise v2.1.5
+; Product: CoreGuard Enterprise
 ; =====================================================================
 
 #define MyAppName "CoreGuard Enterprise"
@@ -56,7 +56,7 @@ Source: "config.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 Source: "releases\*"; DestDir: "{app}\releases"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: hub
 ; Документация в дистрибутиве
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\CoreGuard\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Описание и презентация (PDF)"; Filename: "{app}\PRODUCT_BROCHURE.pdf"

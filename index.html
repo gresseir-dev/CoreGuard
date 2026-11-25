@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
@@ -926,9 +926,6 @@
           <a href="https://github.com/gresseir-dev/CoreGuard" target="_blank" rel="noopener" class="btn btn-outline">
             💻 Репозиторий на GitHub (gresseir-dev)
           </a>
-          <button type="button" onclick="copyEmail()" class="btn btn-outline">
-            📋 Скопировать Email для связи
-          </button>
         </div>
       </div>
 
@@ -939,19 +936,5 @@
     </div>
   </footer>
 
-  <div id="copy-toast" class="copy-toast">Email скопирован в буфер обмена!</div>
-
-  <script>
-    function copyEmail() {
-      const email = "coreguard.support@gmail.com"; // Замените на ваш рабочий email
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(email);
-      }
-      const toast = document.getElementById("copy-toast");
-      toast.textContent = "Скопировано: " + email;
-      toast.classList.add("show");
-      setTimeout(() => toast.classList.remove("show"), 2600);
-    }
-  </script>
 </body>
 </html>

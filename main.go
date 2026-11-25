@@ -4,11 +4,9 @@ package main
 import (
     "bytes"
     "context"
-    "crypto/ed25519"
     "crypto/sha256"
     "crypto/subtle"
     _ "embed"
-    "encoding/base64"
     "encoding/hex"
     "encoding/json"
     "flag"
@@ -29,7 +27,6 @@ import (
 
     "golang.org/x/sys/windows"
 )
-
 var (
     prevIdleTime   uint64
     prevKernelTime uint64
@@ -75,18 +72,11 @@ func getLiveCpuLoad() float64 {
 }
 
 func readLiveTemperatures() (int, int) {
-    // Базовая температура простоя
     cpuTemp := 38
     mbTemp := 33
-
-    // Живой замер нагрузки ЦП (0 - 100%)
     load := getLiveCpuLoad()
-
-    // Динамический прирост температуры под нагрузкой
-    // В простое: ~38°C, при 50% нагрузке: ~58°C, при 100% нагрузке: ~78°C
     cpuTemp += int((load / 100.0) * 40.0)
     mbTemp += int((load / 100.0) * 8.0)
-
     return cpuTemp, mbTemp
 }
 
@@ -97,8 +87,6 @@ var embeddedDashboard []byte
 var embeddedIcon []byte
 
 const AgentVersion = "2.3.34"
-
-const LicensePublicKeyHex = "001594263b9744110c1cbb9a968ea685e14ed9b4e44cdd860e79f4d81d8b3461"
 
 const (
     SingleInstanceMutexName = "Local\\CoreGuard_SingleInstance_Mutex"
@@ -229,25 +217,25 @@ type MspBranding struct {
 }
 
 type Config struct {
-    ClientOrganization  string      `json:"client_organization"`
-    MspBranding         MspBranding `json:"msp_branding"`
-    Mode                string      `json:"mode"`
-    LicenseKey          string      `json:"license_key"`
-    PollIntervalMin     int         `json:"poll_interval_min"`
-    RemoteAccessEnabled bool        `json:"remote_access_enabled"`
-    RemotePort          int         `json:"remote_port"`
-    AuthUser            string      `json:"auth_user"`
-    AuthPass            string      `json:"auth_pass"`
-    IPWhitelist         string      `json:"ip_whitelist"`
-    BackupScript        string      `json:"backup_script"`
+    ClientOrganization  string       `json:"client_organization"`
+    MspBranding         MspBranding  `json:"msp_branding"`
+    Mode                string       `json:"mode"`
+    LicenseKey          string       `json:"license_key"`
+    PollIntervalMin     int          `json:"poll_interval_min"`
+    RemoteAccessEnabled bool         `json:"remote_access_enabled"`
+    RemotePort          int          `json:"remote_port"`
+    AuthUser            string       `json:"auth_user"`
+    AuthPass            string       `json:"auth_pass"`
+    IPWhitelist         string       `json:"ip_whitelist"`
+    BackupScript        string       `json:"backup_script"`
     Thresholds          map[int]int  `json:"thresholds"`
-	IgnoredDrives       map[int]bool `json:"ignored_drives"`
-    CpuThreshold        int         `json:"cpu_threshold"`
-    MbThreshold         int         `json:"mb_threshold"`
-    SpaceThresholdPct   int         `json:"space_threshold_pct"`
-    Language            string      `json:"language"`
-    PopupAlertEnabled   *bool       `json:"popup_alert_enabled"`
-    PopupRepeatMin      int         `json:"popup_repeat_min"`
+    IgnoredDrives       map[int]bool `json:"ignored_drives"`
+    CpuThreshold        int          `json:"cpu_threshold"`
+    MbThreshold         int          `json:"mb_threshold"`
+    SpaceThresholdPct   int          `json:"space_threshold_pct"`
+    Language            string       `json:"language"`
+    PopupAlertEnabled   *bool        `json:"popup_alert_enabled"`
+    PopupRepeatMin      int          `json:"popup_repeat_min"`
 }
 
 type DriveInfo struct {
@@ -289,21 +277,21 @@ type TelemetryReport struct {
 }
 
 var (
-    isTestMode     bool
-    globalConfig   Config
-    globalReport   TelemetryReport
-    globalHWnd     windows.Handle
-    nid            NOTIFYICONDATAW
-    history        []HistorySnapshot
-    appMutex       windows.Handle
-    lockFile       *os.File
-    activeLicense  LicensePayload
-    tickerResetCh  = make(chan time.Duration, 1)
-    remoteServer   *http.Server
-    popupActive    atomic.Int32
-    lastPopupTime  time.Time
-    remoteMu       sync.Mutex
-    stateMu        sync.RWMutex
+    isTestMode    bool
+    globalConfig  Config
+    globalReport  TelemetryReport
+    globalHWnd    windows.Handle
+    nid           NOTIFYICONDATAW
+    history       []HistorySnapshot
+    appMutex      windows.Handle
+    lockFile      *os.File
+    activeLicense LicensePayload
+    tickerResetCh = make(chan time.Duration, 1)
+    remoteServer  *http.Server
+    popupActive   atomic.Int32
+    lastPopupTime time.Time
+    remoteMu      sync.Mutex
+    stateMu       sync.RWMutex
 )
 
 func getExeDirPath(filename string) string {
@@ -312,73 +300,12 @@ func getExeDirPath(filename string) string {
     }
     return filename
 }
+
 const historyFileName = "history.json"
 const configFileName = "config.json"
 const lockFileName = "coreguard.lock"
 
-func verifyLicenseKey(keyStr string) (LicensePayload, error) {
-    cleanKey := strings.Map(func(r rune) rune {
-        if r == ' ' || r == '\t' || r == '\r' || r == '\n' {
-            return -1
-        }
-        return r
-    }, keyStr)
-
-    if cleanKey == "" {
-        return LicensePayload{Tier: "FREE", MinIntervalSec: 7200}, nil
-    }
-
-    parts := strings.Split(cleanKey, ".")
-    if len(parts) != 2 {
-        return LicensePayload{}, fmt.Errorf("invalid format")
-    }
-
-    decodeB64 := func(s string) ([]byte, error) {
-        if b, err := base64.RawURLEncoding.DecodeString(s); err == nil {
-            return b, nil
-        }
-        if b, err := base64.URLEncoding.DecodeString(s); err == nil {
-            return b, nil
-        }
-        if b, err := base64.RawStdEncoding.DecodeString(s); err == nil {
-            return b, nil
-        }
-        return base64.StdEncoding.DecodeString(s)
-    }
-
-    payloadBytes, err := decodeB64(parts[0])
-    if err != nil {
-        return LicensePayload{}, fmt.Errorf("unpack error")
-    }
-
-    sigBytes, err := decodeB64(parts[1])
-    if err != nil {
-        return LicensePayload{}, fmt.Errorf("signature error")
-    }
-
-    pubKeyBytes, err := hex.DecodeString(LicensePublicKeyHex)
-    if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
-        return LicensePayload{}, fmt.Errorf("public key error")
-    }
-
-    if !ed25519.Verify(pubKeyBytes, payloadBytes, sigBytes) {
-        return LicensePayload{}, fmt.Errorf("signature mismatch")
-    }
-
-    var payload LicensePayload
-    if err := json.Unmarshal(payloadBytes, &payload); err != nil {
-        return LicensePayload{}, fmt.Errorf("payload error")
-    }
-
-    if payload.ExpiresAt > 0 && time.Now().Unix() > payload.ExpiresAt {
-        return LicensePayload{Tier: "FREE", MinIntervalSec: 7200}, fmt.Errorf("license expired")
-    }
-
-    return payload, nil
-}
-
 func applyLicenseConstraints() {
-    // Бесплатная полнофункциональная модель Enterprise из коробки
     activeLicense = LicensePayload{
         Tier:           "ENTERPRISE",
         Client:         globalConfig.ClientOrganization,
@@ -405,7 +332,7 @@ func acquireSingleInstanceGuard() bool {
     }
     appMutex = windows.Handle(hMutex)
 
-    f, err := os.OpenFile(lockFileName, os.O_CREATE|os.O_RDWR, 0666)
+    f, err := os.OpenFile(getExeDirPath(lockFileName), os.O_CREATE|os.O_RDWR, 0666)
     if err != nil {
         notifyAlreadyRunning()
         return false
@@ -436,7 +363,7 @@ func notifyAlreadyRunning() {
 
 func loadConfig() {
     globalConfig = Config{
-        Mode:                "FREE",
+        Mode:                "ENTERPRISE",
         PollIntervalMin:     5,
         RemoteAccessEnabled: true,
         RemotePort:          48123,
@@ -445,10 +372,10 @@ func loadConfig() {
         IPWhitelist:         "",
         BackupScript:        "",
         Thresholds:          make(map[int]int),
-		IgnoredDrives:       make(map[int]bool),
+        IgnoredDrives:       make(map[int]bool),
         CpuThreshold:        70,
         MbThreshold:         50,
-        SpaceThresholdPct:   10,
+        SpaceThresholdPct:   30,
         Language:            "RU",
     }
     if fileData, err := os.ReadFile(getExeDirPath(configFileName)); err == nil {
@@ -456,7 +383,9 @@ func loadConfig() {
     }
     if globalConfig.Thresholds == nil {
         globalConfig.Thresholds = make(map[int]int)
-	if globalConfig.IgnoredDrives == nil { globalConfig.IgnoredDrives = make(map[int]bool) }
+    }
+    if globalConfig.IgnoredDrives == nil {
+        globalConfig.IgnoredDrives = make(map[int]bool)
     }
     if globalConfig.CpuThreshold < 20 || globalConfig.CpuThreshold > 100 {
         globalConfig.CpuThreshold = 70
@@ -465,7 +394,7 @@ func loadConfig() {
         globalConfig.MbThreshold = 50
     }
     if globalConfig.SpaceThresholdPct < 5 || globalConfig.SpaceThresholdPct > 50 {
-        globalConfig.SpaceThresholdPct = 10
+        globalConfig.SpaceThresholdPct = 30
     }
     if globalConfig.Language != "ENG" {
         globalConfig.Language = "RU"
@@ -503,7 +432,6 @@ func pruneHistory() {
     }
     history = filtered
 }
-
 func utf16FromString(s string) []uint16 {
     res, _ := windows.UTF16FromString(s)
     return res
@@ -521,8 +449,8 @@ func getAppIcon() windows.Handle {
     const IMAGE_ICON = 1
     const LR_LOADFROMFILE = 0x00000010
 
-    if _, err := os.Stat("app.ico"); err == nil {
-        pName, _ := windows.UTF16PtrFromString("app.ico")
+    if _, err := os.Stat(getExeDirPath("app.ico")); err == nil {
+        pName, _ := windows.UTF16PtrFromString(getExeDirPath("app.ico"))
         hIcon, _, _ := procLoadImageW.Call(
             0,
             uintptr(unsafe.Pointer(pName)),
@@ -536,8 +464,8 @@ func getAppIcon() windows.Handle {
     }
 
     if len(embeddedIcon) > 0 {
-        _ = os.WriteFile("app.ico", embeddedIcon, 0644)
-        pName, _ := windows.UTF16PtrFromString("app.ico")
+        _ = os.WriteFile(getExeDirPath("app.ico"), embeddedIcon, 0644)
+        pName, _ := windows.UTF16PtrFromString(getExeDirPath("app.ico"))
         hIcon, _, _ := procLoadImageW.Call(
             0,
             uintptr(unsafe.Pointer(pName)),
@@ -1089,7 +1017,7 @@ func remoteAuthMiddleware(next http.Handler) http.Handler {
             user, pass, ok := r.BasicAuth()
             if !ok || subtle.ConstantTimeCompare([]byte(user), []byte(authUser)) != 1 ||
                 subtle.ConstantTimeCompare([]byte(pass), []byte(authPass)) != 1 {
-                w.Header().Set("WWW-Authenticate", `Basic realm="CoreGuard PRO Telemetry"`)
+                w.Header().Set("WWW-Authenticate", `Basic realm="CoreGuard Enterprise Telemetry"`)
                 http.Error(w, "Unauthorized: Please log in", http.StatusUnauthorized)
                 return
             }
@@ -1127,58 +1055,22 @@ func buildAppRouter() *http.ServeMux {
         _ = json.NewEncoder(w).Encode(respData)
     })
 
-    mux.HandleFunc("/api/activate", func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("Content-Type", "application/json")
-        var body struct {
-            LicenseKey string `json:"license_key"`
-        }
-        if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-            _ = json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "Invalid request"})
-            return
-        }
-
-        payload, err := verifyLicenseKey(body.LicenseKey)
-        if err != nil {
-            _ = json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": err.Error()})
-            return
-        }
-
-        stateMu.Lock()
-        globalConfig.LicenseKey = strings.TrimSpace(body.LicenseKey)
-        applyLicenseConstraints()
-        saveConfig()
-        newInterval := time.Duration(globalConfig.PollIntervalMin) * time.Minute
-        stateMu.Unlock()
-
-        tickerResetCh <- newInterval
-        syncRemoteServer()
-        go runCheckCycle()
-
-        _ = json.NewEncoder(w).Encode(map[string]interface{}{
-            "success": true,
-            "mode":    globalConfig.Mode,
-            "client":  payload.Client,
-        })
-    })
-
     mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
         if r.Method == "POST" {
             var body Config
             if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
                 stateMu.Lock()
-                if true {
-                    if body.PollIntervalMin >= 1 && body.PollIntervalMin <= 1440 {
-                        globalConfig.PollIntervalMin = body.PollIntervalMin
-                    }
-                    globalConfig.RemoteAccessEnabled = body.RemoteAccessEnabled
-                    if body.RemotePort >= 1024 && body.RemotePort <= 65535 {
-                        globalConfig.RemotePort = body.RemotePort
-                    }
-                    globalConfig.AuthUser = body.AuthUser
-                    globalConfig.AuthPass = body.AuthPass
-                    globalConfig.IPWhitelist = body.IPWhitelist
-                    globalConfig.BackupScript = body.BackupScript
+                if body.PollIntervalMin >= 1 && body.PollIntervalMin <= 1440 {
+                    globalConfig.PollIntervalMin = body.PollIntervalMin
                 }
+                globalConfig.RemoteAccessEnabled = body.RemoteAccessEnabled
+                if body.RemotePort >= 1024 && body.RemotePort <= 65535 {
+                    globalConfig.RemotePort = body.RemotePort
+                }
+                globalConfig.AuthUser = body.AuthUser
+                globalConfig.AuthPass = body.AuthPass
+                globalConfig.IPWhitelist = body.IPWhitelist
+                globalConfig.BackupScript = body.BackupScript
 
                 if body.CpuThreshold >= 20 && body.CpuThreshold <= 100 {
                     globalConfig.CpuThreshold = body.CpuThreshold
@@ -1480,7 +1372,7 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
                 t4 := utf16FromString("4. Low Disk Space (C: < Threshold)")
                 t5 := utf16FromString("5. SSD Wear Critical (> 95%)")
                 t6 := utf16FromString("6. Pending Sectors Detected")
-                t7 := utf16FromString("7. [PRO] Emergency Backup Script Triggered")
+                t7 := utf16FromString("7. [ENTERPRISE] Emergency Backup Script Triggered")
 
                 procAppendMenuW.Call(hTestMenu, MF_STRING, ID_TEST_SMART_CRIT, uintptr(unsafe.Pointer(&t1[0])))
                 procAppendMenuW.Call(hTestMenu, MF_STRING, ID_TEST_SYS_TEMP, uintptr(unsafe.Pointer(&t2[0])))
@@ -1529,7 +1421,7 @@ func trayWindowProc(hwnd windows.Handle, msg uint32, wparam, lparam uintptr) uin
         case ID_TEST_PENDING:
             showTrayNotification("Warning! Bad Sectors Detected!", "Drive reported unstable/pending sectors.", true)
         case ID_TEST_PRO_BACKUP:
-            showTrayNotification("CoreGuard PRO: Backup Activated", "[PRO] Drive failure risk identified. Emergency backup script triggered.", false)
+            showTrayNotification("CoreGuard Enterprise: Backup Activated", "[ENTERPRISE] Drive failure risk identified. Emergency backup script triggered.", false)
         }
         return 0
 
@@ -1606,7 +1498,7 @@ func main() {
         UCallbackMessage: WM_TRAY_NOTIFY,
         HIcon:            hIcon,
     }
-    copyToUTF16Fixed(nid.SzTip[:], "CoreGuard PRO: Starting engine...")
+    copyToUTF16Fixed(nid.SzTip[:], "CoreGuard Enterprise: Starting engine...")
     procShellNotifyIconW.Call(NIM_ADD, uintptr(unsafe.Pointer(&nid)))
 
     go runCheckCycle()

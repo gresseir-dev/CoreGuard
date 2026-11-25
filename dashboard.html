@@ -264,7 +264,7 @@
         <div class="threshold-control" style="margin-top: 6px; justify-content: space-between;">
           <span data-i18n="lblSpaceCritThresh">Критич. порог:</span>
           <div style="display:flex; align-items:center; gap:4px;">
-            <input id="thresh-input-space-pct" class="threshold-input" type="number" min="5" max="50" value="10"> %
+            <input id="thresh-input-space-pct" class="threshold-input" type="number" min="5" max="50" value="30"> %
             <button class="btn-action" style="padding: 2px 8px;" onclick="saveSpaceThreshold()">OK</button>
           </div>
         </div>
@@ -481,7 +481,6 @@ async function toggleIgnoreDrive(index, ignored) {
   const payload = {
     thresholds: driveThresholds,
     ignored_drives: ignoredDrives,
-    ignored_drives: ignoredDrives,
     cpu_threshold: parseInt(document.getElementById('thresh-input-cpu').value, 10) || 70,
     mb_threshold: parseInt(document.getElementById('thresh-input-mb').value, 10) || 50,
     space_threshold_pct: parseInt(document.getElementById('thresh-input-space-pct').value, 10) || 10,
@@ -582,7 +581,7 @@ async function refreshData() {
 
     const badge = document.getElementById('mode-badge');
     badge.innerText = currentMode === 'PRO' ? t.modePro : (currentMode === 'ENTERPRISE' ? t.modeEnterprise : t.modeFree);
-    badge.className = 'badge ' + (currentMode === 'PRO' ? 'badge-pro' : 'badge-free');
+    badge.className = 'badge ' + ((currentMode === 'PRO' || currentMode === 'ENTERPRISE') ? 'badge-pro' : 'badge-free');
 
     const ownerEl = document.getElementById('license-owner');
     ownerEl.innerText = currentLang === 'RU' ? 'Редакция: Enterprise (Все функции активны)' : 'Edition: Enterprise (Full features enabled)';
@@ -593,7 +592,7 @@ async function refreshData() {
 
     if (!isModalOpen) {
       if (activeEl !== document.getElementById('cfg-poll-interval')) {
-        document.getElementById('cfg-poll-interval').value = (cfg.poll_interval_min || 120).toString();
+        document.getElementById('cfg-poll-interval').value = (cfg.poll_interval_min || 5).toString();
       }
       document.getElementById('cfg-remote-enabled').checked = !!cfg.remote_access_enabled;
       document.getElementById('cfg-remote-port').value = cfg.remote_port || 48123;
